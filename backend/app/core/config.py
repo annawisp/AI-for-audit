@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     api_cors_origins: str = Field(default="http://localhost:5173")
 
+    database_path: str = "data/audit.sqlite3"
+    upload_dir: str = "uploads"
+    upload_max_bytes: int = 10 * 1024 * 1024
+    upload_allowed_extensions: str = ".txt,.pdf,.docx,.xlsx,.csv"
+
     @field_validator("app_env")
     @classmethod
     def validate_environment(cls, value: str) -> str:
@@ -32,6 +37,14 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.api_cors_origins.split(",") if origin.strip()]
+
+    @property
+    def allowed_upload_extensions(self) -> set[str]:
+        return {
+            extension.strip().lower()
+            for extension in self.upload_allowed_extensions.split(",")
+            if extension.strip()
+        }
 
 
 @lru_cache

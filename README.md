@@ -2,7 +2,7 @@
 
 这是收入循环智能审计助手的工程骨架。产品架构遵循：**Audit Procedure 是主流程，AI/Rules 是可插拔能力，Evidence 是统一输出，Human Review 是正式结论入口**。
 
-当前完成范围：`Stage 1 / Step 1.1 / TASK-101`。
+当前完成范围：`Stage 1 / Step 1.2 / TASK-102`。
 
 ## 当前能力
 
@@ -15,10 +15,14 @@
 - 环境变量模板与敏感信息隔离规则
 - Python / Node 锁定依赖
 - GitHub Actions 跨平台后端检查与前端构建配置
+- SQLite 本地数据库初始化
+- Project / Document 基础 API
+- 脱敏样例文件上传与元数据登记
+- 文件大小、类型和空文件校验
 
-> 当前版本没有数据库、文件上传、审计程序状态机和真实客户资料处理。这些属于后续任务。
+> 当前版本没有合同解析、审计程序状态机、AI 审计判断、Evidence 深度流转和真实客户资料处理。这些属于后续任务。
 >
-> 当前状态为 **TASK-101 本地整改完成后待验收**。健康检查通过只代表基础 API 服务可用，不代表收入审计智能体已经具备审计能力。
+> 当前状态为 **TASK-102 本地整改完成后待验收**。健康检查通过只代表基础 API 服务可用，不代表收入审计智能体已经具备审计能力。
 
 ## 目录结构
 
@@ -130,13 +134,13 @@ npm run build
 ## 安全约束
 
 - 禁止提交 API Key、密码、私钥、客户合同、收入明细、银行流水或未脱敏底稿。
-- 真实资料只允许进入后续设计的受控文件存储，不得放入 `sample_data`。
+- 真实资料不得进入当前 MVP 上传目录；当前上传接口仅用于脱敏样例文件验证。
 - `sample_data` 只保存人工合成或充分脱敏的数据，并标明来源类型。
 - 日志不得输出原始合同全文、身份证号、银行账号或完整交易明细。
 - 提交前运行测试，并执行 `git status --short` 与 `git diff --staged`。
 - `pytest` 会检查常见敏感文件、运行日志和构建产物是否被 Git 忽略，并扫描已跟踪文本中的明显密钥模式。
 
-## TASK-101 本地验收命令
+## TASK-102 本地验收命令
 
 在完成依赖安装后执行：
 
@@ -155,6 +159,6 @@ git status --short
 
 ## 下一步
 
-按任务书进入 `Stage 1 / Step 1.2 / TASK-102`：设计 Project、Document、Procedure、Evidence、Review、Run 的持久化模型，并实现项目创建、文件上传和状态查询。
+按任务书进入 `Stage 2 / Step 2.1 / TASK-201`：设计 Project Context MVP，明确项目级上下文的最小必要字段、版本记录和缺失资料处理方式。
 
 架构说明见 [`docs/architecture.md`](docs/architecture.md)，关键技术决策见 [`docs/decisions/ADR-001-foundation-stack.md`](docs/decisions/ADR-001-foundation-stack.md)。

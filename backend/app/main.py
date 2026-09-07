@@ -6,14 +6,18 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
 from app.core.config import get_settings
+from app.core.database import initialize_database
 from app.core.logging import configure_logging, get_logger
 from app.core.trace import TraceMiddleware
+from app.services.storage import resolve_upload_dir
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     configure_logging(settings.log_level)
+    initialize_database(settings)
+    resolve_upload_dir(settings).mkdir(parents=True, exist_ok=True)
     logger = get_logger(__name__)
     logger.info("application_started", extra={"environment": settings.app_env})
     yield

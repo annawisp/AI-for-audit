@@ -63,6 +63,8 @@ python-dotenv==1.2.3
     # via
     #   pydantic-settings
     #   uvicorn
+python-multipart==0.0.32
+    # via ai-for-audit-backend (pyproject.toml)
 pyyaml==6.0.3
     # via uvicorn
 ruff==0.16.6

@@ -10,6 +10,9 @@ secrets/
 data/
 uploads/
 client_data/
+*.sqlite
+*.sqlite3
+*.db
 sample_data/*
 !sample_data/.gitkeep
 !sample_data/README.md
