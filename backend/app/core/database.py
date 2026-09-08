@@ -96,5 +96,19 @@ def initialize_database(settings: Settings) -> None:
                 error_message TEXT,
                 FOREIGN KEY (project_id) REFERENCES projects(project_id)
             );
+
+            CREATE TABLE IF NOT EXISTS project_context_versions (
+                version_id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                version INTEGER NOT NULL,
+                payload_json TEXT NOT NULL,
+                changed_by TEXT,
+                change_reason TEXT,
+                changed_sections TEXT NOT NULL,
+                is_current INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (project_id) REFERENCES projects(project_id),
+                UNIQUE (project_id, version)
+            );
             """
         )
