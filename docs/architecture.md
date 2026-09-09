@@ -1,4 +1,4 @@
-# 工程架构说明（TASK-101）
+# 工程架构说明
 
 ## 1. 为什么不是“多个 Agent 串行执行”
 
@@ -12,7 +12,7 @@ API → Application Service → Audit Procedure Orchestrator → Capability
                                          Review → Working Paper
 ```
 
-TASK-101 只建立这些边界，不提前实现业务逻辑。
+TASK-101 建立工程边界；TASK-102 补充项目、文件、数据库和本地存储；TASK-202 在这些基础上落地统一 Evidence Object。
 
 ## 2. 各目录的责任
 
@@ -20,7 +20,7 @@ TASK-101 只建立这些边界，不提前实现业务逻辑。
 - `services`：组织用例，协调领域能力和存储。
 - `orchestrator`：后续管理 Procedure 的依赖、九态状态和局部失败。
 - `capabilities`：合同解析、收入确认、风险识别等可独立运行的能力。
-- `evidence`：后续负责统一证据对象、证据链和来源定位。
+- `evidence`：负责统一证据对象、证据链和来源定位；TASK-202 先实现 Evidence Object Schema、状态流转和版本读取。
 - `models`：后续存放数据库持久化模型。
 - `schemas`：API 与领域对象的显式数据契约。
 - `core`：配置、日志、安全和追踪等公共基础设施。
@@ -37,3 +37,10 @@ TASK-101 只建立这些边界，不提前实现业务逻辑。
 
 `GET /api/v1/health` 仅证明 API 进程及基础配置可用。它不代表数据库、模型服务、文件存储或审计能力健康；这些依赖加入后应扩展为分项 readiness 检查。
 
+## 5. TASK-202 Evidence Object 边界
+
+TASK-202 的 Evidence Object 是规则、AI 判断、人工复核和底稿输出共同使用的数据契约。当前只实现证据对象的结构化保存、读取、状态更新和历史版本快照，不实现合同解析、收入确认判断或底稿生成。
+
+- `execution_status`：记录能力或程序执行层面的状态。
+- `node_status`：记录该证据节点在流程中是否可用、部分可用或阻塞。
+- `judgment_status`：记录审计判断和人工复核流转，覆盖 `AI_GENERATED`、`PENDING_REVIEW`、`CONFIRMED`、`MODIFIED`、`REJECTED`、`NEED_MORE_EVIDENCE`。

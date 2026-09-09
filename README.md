@@ -2,7 +2,7 @@
 
 这是收入循环智能审计助手的工程骨架。产品架构遵循：**Audit Procedure 是主流程，AI/Rules 是可插拔能力，Evidence 是统一输出，Human Review 是正式结论入口**。
 
-当前完成范围：`Stage 1 / Step 1.2 / TASK-102`。
+当前完成范围：`Stage 2 / Step 2.2 / TASK-202` 代码草稿。
 
 ## 当前能力
 
@@ -19,10 +19,13 @@
 - Project / Document 基础 API
 - 脱敏样例文件上传与元数据登记
 - 文件大小、类型和空文件校验
+- Evidence Object 统一 Schema
+- Evidence 创建、列表、读取与状态更新 API
+- Evidence Object 历史版本快照读取
 
-> 当前版本没有合同解析、审计程序状态机、AI 审计判断、Evidence 深度流转和真实客户资料处理。这些属于后续任务。
+> 当前版本没有合同解析、审计程序状态机、AI 审计判断、底稿输出和真实客户资料处理。这些属于后续任务。
 >
-> 当前状态为 **TASK-102 本地整改完成后待验收**。健康检查通过只代表基础 API 服务可用，不代表收入审计智能体已经具备审计能力。
+> 当前状态为 **TASK-202 本地代码草稿完成后待验收**。Evidence API 可用只代表统一证据对象可以被保存、流转和追溯，不代表收入审计智能体已经具备审计判断能力。
 
 ## 目录结构
 
@@ -33,7 +36,7 @@ ai-for-audit/
 │   │   ├── api/            # HTTP API 路由
 │   │   ├── capabilities/   # 独立审计能力模块
 │   │   ├── core/           # 配置、日志等横切能力
-│   │   ├── evidence/       # Evidence 组装（后续实现）
+│   │   ├── evidence/       # Evidence 组装与证据链能力（后续深化）
 │   │   ├── models/         # 持久化模型（后续实现）
 │   │   ├── orchestrator/   # Audit Procedure 编排器（后续实现）
 │   │   ├── schemas/        # API / 领域数据结构
@@ -140,7 +143,7 @@ npm run build
 - 提交前运行测试，并执行 `git status --short` 与 `git diff --staged`。
 - `pytest` 会检查常见敏感文件、运行日志和构建产物是否被 Git 忽略，并扫描已跟踪文本中的明显密钥模式。
 
-## TASK-102 本地验收命令
+## 本地验收命令
 
 在完成依赖安装后执行：
 
@@ -159,6 +162,6 @@ git status --short
 
 ## 下一步
 
-按任务书进入 `Stage 2 / Step 2.1 / TASK-201`：设计 Project Context MVP，明确项目级上下文的最小必要字段、版本记录和缺失资料处理方式。
+按任务书继续推进 `Stage 2 / Step 2.3 / TASK-203`：数据标准化与质量分级。TASK-203 应在 TASK-202 的 Evidence Object 基础上保存 raw value、standard value、normalization rule 和数据质量状态。
 
 架构说明见 [`docs/architecture.md`](docs/architecture.md)，关键技术决策见 [`docs/decisions/ADR-001-foundation-stack.md`](docs/decisions/ADR-001-foundation-stack.md)。

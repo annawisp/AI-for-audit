@@ -20,6 +20,18 @@ def _row_to_dict(row: Any) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
+def _json_dumps(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)
+
+
+def _evidence_row_to_dict(row: Any) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    item = dict(row)
+    item["extracted_value"] = json.loads(str(item.pop("extracted_value_json")))
+    return item
+
+
 class AuditRepository:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -130,6 +142,185 @@ class AuditRepository:
                 (project_id,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def get_procedure(self, project_id: str, procedure_id: str) -> dict[str, Any] | None:
+        with get_connection(self.settings) as connection:
+            row = connection.execute(
+                "SELECT * FROM procedures WHERE project_id = ? AND procedure_id = ?",
+                (project_id, procedure_id),
+            ).fetchone()
+        return _row_to_dict(row)
+
+    def create_evidence(
+        self,
+        *,
+        project_id: str,
+        procedure_id: str | None,
+        document_id: str | None,
+        source: str,
+        extracted_value: Any,
+        conclusion: str | None,
+        execution_status: str,
+        node_status: str,
+        judgment_status: str,
+        confidence: float | None,
+        model_confidence: float | None,
+        confidence_level: str | None,
+        confidence_basis: str | None,
+        reviewer: str | None,
+    ) -> dict[str, Any]:
+        evidence_id = str(uuid4())
+        timestamp = utc_now()
+        with get_connection(self.settings) as connection:
+            connection.execute(
+                """
+                INSERT INTO evidence (
+                    evidence_id, project_id, procedure_id, document_id, source,
+                    extracted_value_json, conclusion, execution_status, node_status,
+                    judgment_status, confidence, model_confidence, confidence_level,
+                    confidence_basis, reviewer, schema_version, object_version,
+                    timestamp, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    evidence_id,
+                    project_id,
+                    procedure_id,
+                    document_id,
+                    source,
+                    _json_dumps(extracted_value),
+                    conclusion,
+                    execution_status,
+                    node_status,
+                    judgment_status,
+                    confidence,
+                    model_confidence,
+                    confidence_level,
+                    confidence_basis,
+                    reviewer,
+                    1,
+                    1,
+                    timestamp,
+                    timestamp,
+                    timestamp,
+                ),
+            )
+            evidence = self._get_evidence_with_connection(connection, project_id, evidence_id)
+            if evidence is None:
+                raise RuntimeError("Created evidence could not be loaded")
+            self._create_evidence_version(connection, evidence)
+        return evidence
+
+    def get_evidence(self, project_id: str, evidence_id: str) -> dict[str, Any] | None:
+        with get_connection(self.settings) as connection:
+            return self._get_evidence_with_connection(connection, project_id, evidence_id)
+
+    def list_evidence(self, project_id: str) -> list[dict[str, Any]]:
+        with get_connection(self.settings) as connection:
+            rows = connection.execute(
+                "SELECT * FROM evidence WHERE project_id = ? ORDER BY updated_at DESC",
+                (project_id,),
+            ).fetchall()
+        return [item for row in rows if (item := _evidence_row_to_dict(row)) is not None]
+
+    def update_evidence(
+        self,
+        *,
+        project_id: str,
+        evidence_id: str,
+        updates: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        allowed_columns = {
+            "execution_status",
+            "node_status",
+            "judgment_status",
+            "conclusion",
+            "confidence",
+            "model_confidence",
+            "confidence_level",
+            "confidence_basis",
+            "reviewer",
+        }
+        update_columns = [column for column in updates if column in allowed_columns]
+        if not update_columns:
+            return self.get_evidence(project_id, evidence_id)
+
+        timestamp = utc_now()
+        with get_connection(self.settings) as connection:
+            current = self._get_evidence_with_connection(connection, project_id, evidence_id)
+            if current is None:
+                return None
+
+            assignments = [f"{column} = ?" for column in update_columns]
+            assignments.extend(["object_version = ?", "timestamp = ?", "updated_at = ?"])
+            parameters = [updates[column] for column in update_columns]
+            parameters.extend([int(current["object_version"]) + 1, timestamp, timestamp])
+            parameters.extend([project_id, evidence_id])
+            connection.execute(
+                f"""
+                UPDATE evidence
+                SET {", ".join(assignments)}
+                WHERE project_id = ? AND evidence_id = ?
+                """,
+                tuple(parameters),
+            )
+            evidence = self._get_evidence_with_connection(connection, project_id, evidence_id)
+            if evidence is None:
+                raise RuntimeError("Updated evidence could not be loaded")
+            self._create_evidence_version(connection, evidence)
+        return evidence
+
+    def get_evidence_version(
+        self,
+        *,
+        project_id: str,
+        evidence_id: str,
+        object_version: int,
+    ) -> dict[str, Any] | None:
+        with get_connection(self.settings) as connection:
+            row = connection.execute(
+                """
+                SELECT payload_json
+                FROM evidence_versions
+                WHERE project_id = ? AND evidence_id = ? AND object_version = ?
+                """,
+                (project_id, evidence_id, object_version),
+            ).fetchone()
+        if row is None:
+            return None
+        return json.loads(str(row["payload_json"]))
+
+    def _get_evidence_with_connection(
+        self,
+        connection: Any,
+        project_id: str,
+        evidence_id: str,
+    ) -> dict[str, Any] | None:
+        row = connection.execute(
+            "SELECT * FROM evidence WHERE project_id = ? AND evidence_id = ?",
+            (project_id, evidence_id),
+        ).fetchone()
+        return _evidence_row_to_dict(row)
+
+    def _create_evidence_version(self, connection: Any, evidence: dict[str, Any]) -> None:
+        connection.execute(
+            """
+            INSERT INTO evidence_versions (
+                version_id, evidence_id, project_id, object_version, payload_json, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(uuid4()),
+                evidence["evidence_id"],
+                evidence["project_id"],
+                evidence["object_version"],
+                _json_dumps(evidence),
+                utc_now(),
+            ),
+        )
+
 
     def create_project_context_version(
         self,
