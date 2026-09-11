@@ -136,6 +136,44 @@ def initialize_database(settings: Settings) -> None:
                 error_message TEXT,
                 FOREIGN KEY (project_id) REFERENCES projects(project_id)
             );
+
+            CREATE TABLE IF NOT EXISTS normalized_values (
+                normalized_value_id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                evidence_id TEXT,
+                document_id TEXT,
+                procedure_id TEXT,
+                field_name TEXT NOT NULL,
+                value_type TEXT NOT NULL,
+                raw_value_json TEXT NOT NULL,
+                standard_value_json TEXT NOT NULL,
+                normalization_rule TEXT NOT NULL,
+                quality_status TEXT NOT NULL,
+                quality_score INTEGER NOT NULL,
+                issues_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (project_id) REFERENCES projects(project_id),
+                FOREIGN KEY (evidence_id) REFERENCES evidence(evidence_id),
+                FOREIGN KEY (document_id) REFERENCES documents(document_id),
+                FOREIGN KEY (procedure_id) REFERENCES procedures(procedure_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS dataset_quality_snapshots (
+                dataset_quality_id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                dataset_name TEXT NOT NULL,
+                total_records INTEGER NOT NULL,
+                usable_records INTEGER NOT NULL,
+                partial_records INTEGER NOT NULL,
+                rejected_records INTEGER NOT NULL,
+                quality_score INTEGER NOT NULL,
+                quality_status TEXT NOT NULL,
+                procedure_readiness TEXT NOT NULL,
+                issues_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (project_id) REFERENCES projects(project_id)
+            );
+
             CREATE TABLE IF NOT EXISTS project_context_versions (
                 version_id TEXT PRIMARY KEY,
                 project_id TEXT NOT NULL,
