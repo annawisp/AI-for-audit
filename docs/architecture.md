@@ -12,7 +12,7 @@ API → Application Service → Audit Procedure Orchestrator → Capability
                                          Review → Working Paper
 ```
 
-TASK-101 建立工程边界；TASK-102 补充项目、文件、数据库和本地存储；TASK-202 在这些基础上落地统一 Evidence Object。
+TASK-101 建立工程边界；TASK-102 补充项目、文件、数据库和本地存储；TASK-202 在这些基础上落地统一 Evidence Object；TASK-203 补充字段标准化和数据集质量分级。
 
 ## 2. 各目录的责任
 
@@ -21,6 +21,7 @@ TASK-101 建立工程边界；TASK-102 补充项目、文件、数据库和本�
 - `orchestrator`：后续管理 Procedure 的依赖、九态状态和局部失败。
 - `capabilities`：合同解析、收入确认、风险识别等可独立运行的能力。
 - `evidence`：负责统一证据对象、证据链和来源定位；TASK-202 先实现 Evidence Object Schema、状态流转和版本读取。
+- `normalization`：负责原始值、标准值、转换规则和质量状态；TASK-203 先覆盖金额、日期、币种、数字和文本。
 - `models`：后续存放数据库持久化模型。
 - `schemas`：API 与领域对象的显式数据契约。
 - `core`：配置、日志、安全和追踪等公共基础设施。
@@ -44,3 +45,11 @@ TASK-202 的 Evidence Object 是规则、AI 判断、人工复核和底稿输出
 - `execution_status`：记录能力或程序执行层面的状态。
 - `node_status`：记录该证据节点在流程中是否可用、部分可用或阻塞。
 - `judgment_status`：记录审计判断和人工复核流转，覆盖 `AI_GENERATED`、`PENDING_REVIEW`、`CONFIRMED`、`MODIFIED`、`REJECTED`、`NEED_MORE_EVIDENCE`。
+
+## 6. TASK-203 Normalization 边界
+
+TASK-203 不解析合同、不生成审计结论，也不提前实现完整 Procedure Orchestrator。它只负责把能力模块或人工录入得到的结构化字段转换为可追溯的标准化记录，并对数据集可用性给出分级。
+
+- `normalized_values`：保存 `raw_value`、`standard_value`、`normalization_rule`、`quality_status` 和问题列表。
+- `dataset_quality_snapshots`：保存数据集记录数、质量分数和 `procedure_readiness`。
+- `procedure_readiness`：为后续 Procedure 提供 `READY`、`PARTIAL`、`ABSTAINED` 输入，不在本任务中触发真实审计程序。
