@@ -32,6 +32,24 @@ def _evidence_row_to_dict(row: Any) -> dict[str, Any] | None:
     return item
 
 
+def _normalized_value_row_to_dict(row: Any) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    item = dict(row)
+    item["raw_value"] = json.loads(str(item.pop("raw_value_json")))
+    item["standard_value"] = json.loads(str(item.pop("standard_value_json")))
+    item["issues"] = json.loads(str(item.pop("issues_json")))
+    return item
+
+
+def _dataset_quality_row_to_dict(row: Any) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    item = dict(row)
+    item["issues"] = json.loads(str(item.pop("issues_json")))
+    return item
+
+
 class AuditRepository:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -291,6 +309,141 @@ class AuditRepository:
             return None
         return json.loads(str(row["payload_json"]))
 
+    def create_normalized_value(
+        self,
+        *,
+        project_id: str,
+        evidence_id: str | None,
+        document_id: str | None,
+        procedure_id: str | None,
+        field_name: str,
+        value_type: str,
+        raw_value: Any,
+        standard_value: Any,
+        normalization_rule: str,
+        quality_status: str,
+        quality_score: int,
+        issues: list[str],
+    ) -> dict[str, Any]:
+        normalized_value_id = str(uuid4())
+        timestamp = utc_now()
+        with get_connection(self.settings) as connection:
+            connection.execute(
+                """
+                INSERT INTO normalized_values (
+                    normalized_value_id, project_id, evidence_id, document_id,
+                    procedure_id, field_name, value_type, raw_value_json,
+                    standard_value_json, normalization_rule, quality_status,
+                    quality_score, issues_json, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    normalized_value_id,
+                    project_id,
+                    evidence_id,
+                    document_id,
+                    procedure_id,
+                    field_name,
+                    value_type,
+                    _json_dumps(raw_value),
+                    _json_dumps(standard_value),
+                    normalization_rule,
+                    quality_status,
+                    quality_score,
+                    _json_dumps(issues),
+                    timestamp,
+                ),
+            )
+            row = connection.execute(
+                """
+                SELECT * FROM normalized_values
+                WHERE project_id = ? AND normalized_value_id = ?
+                """,
+                (project_id, normalized_value_id),
+            ).fetchone()
+        item = _normalized_value_row_to_dict(row)
+        if item is None:
+            raise RuntimeError("Created normalized value could not be loaded")
+        return item
+
+    def list_normalized_values(self, project_id: str) -> list[dict[str, Any]]:
+        with get_connection(self.settings) as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM normalized_values
+                WHERE project_id = ?
+                ORDER BY created_at DESC
+                """,
+                (project_id,),
+            ).fetchall()
+        return [item for row in rows if (item := _normalized_value_row_to_dict(row)) is not None]
+
+    def create_dataset_quality(
+        self,
+        *,
+        project_id: str,
+        dataset_name: str,
+        total_records: int,
+        usable_records: int,
+        partial_records: int,
+        rejected_records: int,
+        quality_score: int,
+        quality_status: str,
+        procedure_readiness: str,
+        issues: list[str],
+    ) -> dict[str, Any]:
+        dataset_quality_id = str(uuid4())
+        timestamp = utc_now()
+        with get_connection(self.settings) as connection:
+            connection.execute(
+                """
+                INSERT INTO dataset_quality_snapshots (
+                    dataset_quality_id, project_id, dataset_name, total_records,
+                    usable_records, partial_records, rejected_records, quality_score,
+                    quality_status, procedure_readiness, issues_json, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    dataset_quality_id,
+                    project_id,
+                    dataset_name,
+                    total_records,
+                    usable_records,
+                    partial_records,
+                    rejected_records,
+                    quality_score,
+                    quality_status,
+                    procedure_readiness,
+                    _json_dumps(issues),
+                    timestamp,
+                ),
+            )
+            row = connection.execute(
+                """
+                SELECT * FROM dataset_quality_snapshots
+                WHERE project_id = ? AND dataset_quality_id = ?
+                """,
+                (project_id, dataset_quality_id),
+            ).fetchone()
+        item = _dataset_quality_row_to_dict(row)
+        if item is None:
+            raise RuntimeError("Created dataset quality snapshot could not be loaded")
+        return item
+
+    def list_dataset_quality(self, project_id: str) -> list[dict[str, Any]]:
+        with get_connection(self.settings) as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM dataset_quality_snapshots
+                WHERE project_id = ?
+                ORDER BY created_at DESC
+                """,
+                (project_id,),
+            ).fetchall()
+        return [item for row in rows if (item := _dataset_quality_row_to_dict(row)) is not None]
+
     def _get_evidence_with_connection(
         self,
         connection: Any,
@@ -320,7 +473,6 @@ class AuditRepository:
                 utc_now(),
             ),
         )
-
 
     def create_project_context_version(
         self,
