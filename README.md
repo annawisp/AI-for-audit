@@ -2,7 +2,7 @@
 
 这是收入循环智能审计助手的工程骨架。产品架构遵循：**Audit Procedure 是主流程，AI/Rules 是可插拔能力，Evidence 是统一输出，Human Review 是正式结论入口**。
 
-当前完成范围：`Stage 2 / Step 2.2 / TASK-202` 代码草稿。
+当前完成范围：`Stage 2 / Step 2.3 / TASK-203` 代码草稿。
 
 ## 当前能力
 
@@ -22,10 +22,13 @@
 - Evidence Object 统一 Schema
 - Evidence 创建、列表、读取与状态更新 API
 - Evidence Object 历史版本快照读取
+- Project Context 最小上下文字段与版本化快照
+- 字段标准化记录：raw value、standard value、normalization rule、quality status
+- 数据集质量分级：READY / PARTIAL / ABSTAINED procedure readiness 输入
 
 > 当前版本没有合同解析、审计程序状态机、AI 审计判断、底稿输出和真实客户资料处理。这些属于后续任务。
 >
-> 当前状态为 **TASK-202 本地代码草稿完成后待验收**。Evidence API 可用只代表统一证据对象可以被保存、流转和追溯，不代表收入审计智能体已经具备审计判断能力。
+> 当前状态为 **TASK-203 代码上传后待远端 CI 验收**。Normalization API 可用只代表字段标准化记录和数据集质量快照可以被保存、追溯和查询，不代表收入审计智能体已经具备审计判断能力。
 
 ## 目录结构
 
@@ -162,6 +165,6 @@ git status --short
 
 ## 下一步
 
-按任务书继续推进 `Stage 2 / Step 2.3 / TASK-203`：数据标准化与质量分级。TASK-203 应在 TASK-202 的 Evidence Object 基础上保存 raw value、standard value、normalization rule 和数据质量状态。
+按任务书继续推进 `Stage 2 / TASK-204` 或下一项已排期搭建工作。TASK-203 已提供后续审计程序编排所需的标准化字段记录和数据集质量输入，但仍不负责审计结论生成。
 
 架构说明见 [`docs/architecture.md`](docs/architecture.md)，关键技术决策见 [`docs/decisions/ADR-001-foundation-stack.md`](docs/decisions/ADR-001-foundation-stack.md)。
