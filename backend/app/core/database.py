@@ -137,6 +137,61 @@ def initialize_database(settings: Settings) -> None:
                 FOREIGN KEY (project_id) REFERENCES projects(project_id)
             );
 
+            CREATE TABLE IF NOT EXISTS document_parse_runs (
+                parse_run_id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                document_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                parser_name TEXT NOT NULL,
+                parser_version TEXT NOT NULL,
+                requires_ocr INTEGER NOT NULL,
+                ocr_requested INTEGER NOT NULL,
+                ocr_status TEXT NOT NULL,
+                failure_reason TEXT,
+                chunks_count INTEGER NOT NULL,
+                started_at TEXT NOT NULL,
+                completed_at TEXT,
+                FOREIGN KEY (project_id) REFERENCES projects(project_id),
+                FOREIGN KEY (document_id) REFERENCES documents(document_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS document_chunks (
+                chunk_id TEXT PRIMARY KEY,
+                parse_run_id TEXT NOT NULL,
+                project_id TEXT NOT NULL,
+                document_id TEXT NOT NULL,
+                chunk_type TEXT NOT NULL,
+                sequence_number INTEGER NOT NULL,
+                text TEXT NOT NULL,
+                content_json TEXT NOT NULL,
+                page_number INTEGER,
+                sheet_name TEXT,
+                row_number INTEGER,
+                paragraph_number INTEGER,
+                table_index INTEGER,
+                source_locator TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (parse_run_id) REFERENCES document_parse_runs(parse_run_id),
+                FOREIGN KEY (project_id) REFERENCES projects(project_id),
+                FOREIGN KEY (document_id) REFERENCES documents(document_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS contract_extraction_runs (
+                extraction_run_id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                document_id TEXT NOT NULL,
+                evidence_id TEXT,
+                status TEXT NOT NULL,
+                extractor_type TEXT NOT NULL,
+                extractor_version TEXT NOT NULL,
+                fields_json TEXT NOT NULL,
+                failure_reason TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (project_id) REFERENCES projects(project_id),
+                FOREIGN KEY (document_id) REFERENCES documents(document_id),
+                FOREIGN KEY (evidence_id) REFERENCES evidence(evidence_id)
+            );
+
             CREATE TABLE IF NOT EXISTS normalized_values (
                 normalized_value_id TEXT PRIMARY KEY,
                 project_id TEXT NOT NULL,
