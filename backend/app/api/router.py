@@ -8,12 +8,14 @@ from app.api.routes.health import router as health_router
 from app.api.routes.normalization import router as normalization_router
 from app.api.routes.project_context import router as project_context_router
 from app.api.routes.projects import router as projects_router
+from app.api.routes.revenue_recognition import router as revenue_recognition_router
 
 api_router = APIRouter()
 api_router.include_router(projects_router)
 api_router.include_router(documents_router)
 api_router.include_router(document_parse_router)
 api_router.include_router(contract_extraction_router)
+api_router.include_router(revenue_recognition_router)
 api_router.include_router(evidence_router)
 api_router.include_router(normalization_router)
 api_router.include_router(project_context_router)
