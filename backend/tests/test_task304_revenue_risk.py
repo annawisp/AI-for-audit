@@ -56,21 +56,28 @@ def test_revenue_risk_accepts_revenue_records_and_creates_evidence(
     async def scenario():  # type: ignore[no-untyped-def]
         async with app_client() as client:
             project_id = await _create_project(client)
+            evidence_id = await _create_evidence(
+                client,
+                project_id,
+                "capability:contract_extraction",
+                {"raw_text": "年度订阅服务，按月提供平台访问权限，按月确认收入。"},
+            )
             response = await client.post(
                 f"/api/v1/projects/{project_id}/revenue-risk",
                 json={
+                    "contract_evidence_id": evidence_id,
                     "revenue_records": [
                         {
                             "record_id": "REV-1",
                             "amount": "1000",
                             "recognition_date": "2026-03-31",
                         }
-                    ]
+                    ],
                 },
             )
-            evidence_id = response.json()["evidence_id"]
+            revenue_risk_evidence_id = response.json()["evidence_id"]
             evidence_response = await client.get(
-                f"/api/v1/projects/{project_id}/evidence/{evidence_id}"
+                f"/api/v1/projects/{project_id}/evidence/{revenue_risk_evidence_id}"
             )
             return response, evidence_response
 
@@ -78,6 +85,7 @@ def test_revenue_risk_accepts_revenue_records_and_creates_evidence(
 
     assert response.status_code == 201
     payload = response.json()
+    assert payload["coverage"]["contract_evidence"] is True
     assert payload["coverage"]["revenue_record_analysis"] is True
     assert payload["overall_risk_level"] == "LOW"
     evidence = evidence_response.json()
