@@ -2,10 +2,17 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
 
-from app.capabilities.revenue_risk import build_revenue_risk_evidence_value, identify_revenue_risks
+from app.capabilities.revenue_risk import (
+    build_revenue_risk_evidence_value,
+    identify_revenue_risks,
+)
 from app.core.config import get_settings
 from app.schemas.error import ErrorResponse
-from app.schemas.revenue_risk import RevenueRiskListResponse, RevenueRiskRequest, RevenueRiskResponse
+from app.schemas.revenue_risk import (
+    RevenueRiskListResponse,
+    RevenueRiskRequest,
+    RevenueRiskResponse,
+)
 from app.services.repository import AuditRepository
 
 router = APIRouter(prefix="/projects/{project_id}/revenue-risk", tags=["revenue-risk"])
@@ -17,16 +24,47 @@ def _trace_id(request: Request) -> str:
 
 
 def _error(status_code: int, request: Request, code: str, message: str) -> HTTPException:
-    return HTTPException(status_code=status_code, detail=ErrorResponse(code=code, message=message, trace_id=_trace_id(request)).model_dump())
+    return HTTPException(
+        status_code=status_code,
+        detail=ErrorResponse(
+            code=code,
+            message=message,
+            trace_id=_trace_id(request),
+        ).model_dump(),
+    )
 
 
 @router.post("", response_model=RevenueRiskResponse, status_code=status.HTTP_201_CREATED)
-def create_revenue_risk(project_id: str, payload: RevenueRiskRequest, request: Request) -> RevenueRiskResponse:
+def create_revenue_risk(
+    project_id: str,
+    payload: RevenueRiskRequest,
+    request: Request,
+) -> RevenueRiskResponse:
     repository = AuditRepository(get_settings())
     project = _load_project(repository, project_id, request)
-    contract_evidence = _load_optional_evidence(repository, project_id, payload.contract_evidence_id, "capability:contract_extraction", "invalid_contract_evidence_source", request)
-    recognition_evidence = _load_optional_evidence(repository, project_id, payload.revenue_recognition_evidence_id, "capability:revenue_recognition_analysis", "invalid_revenue_recognition_evidence_source", request)
-    result = identify_revenue_risks(project=project, contract_evidence=contract_evidence, revenue_recognition_evidence=recognition_evidence, revenue_records=payload.revenue_records, enable_semantic_judgment=payload.enable_semantic_judgment)
+    contract_evidence = _load_optional_evidence(
+        repository,
+        project_id,
+        payload.contract_evidence_id,
+        "capability:contract_extraction",
+        "invalid_contract_evidence_source",
+        request,
+    )
+    recognition_evidence = _load_optional_evidence(
+        repository,
+        project_id,
+        payload.revenue_recognition_evidence_id,
+        "capability:revenue_recognition_analysis",
+        "invalid_revenue_recognition_evidence_source",
+        request,
+    )
+    result = identify_revenue_risks(
+        project=project,
+        contract_evidence=contract_evidence,
+        revenue_recognition_evidence=recognition_evidence,
+        revenue_records=payload.revenue_records,
+        enable_semantic_judgment=payload.enable_semantic_judgment,
+    )
     evidence = repository.create_evidence(
         project_id=project_id,
         procedure_id=None,
@@ -71,7 +109,12 @@ def list_revenue_risks(project_id: str, request: Request) -> RevenueRiskListResp
     return RevenueRiskListResponse(items=items, total=len(items))
 
 
-def _response_from_result(project_id: str, evidence_id: str, result: dict[str, Any], request: Request) -> RevenueRiskResponse:
+def _response_from_result(
+    project_id: str,
+    evidence_id: str,
+    result: dict[str, Any],
+    request: Request,
+) -> RevenueRiskResponse:
     coverage = result["coverage"]
     return RevenueRiskResponse(
         run_id=evidence_id,
@@ -94,21 +137,47 @@ def _response_from_result(project_id: str, evidence_id: str, result: dict[str, A
     )
 
 
-def _load_project(repository: AuditRepository, project_id: str, request: Request) -> dict[str, Any]:
+def _load_project(
+    repository: AuditRepository,
+    project_id: str,
+    request: Request,
+) -> dict[str, Any]:
     project = repository.get_project(project_id)
     if project is None:
-        raise _error(status.HTTP_404_NOT_FOUND, request, "project_not_found", "Project was not found.")
+        raise _error(
+            status.HTTP_404_NOT_FOUND,
+            request,
+            "project_not_found",
+            "Project was not found.",
+        )
     return project
 
 
-def _load_optional_evidence(repository: AuditRepository, project_id: str, evidence_id: str | None, expected_source: str, invalid_code: str, request: Request) -> dict[str, Any] | None:
+def _load_optional_evidence(
+    repository: AuditRepository,
+    project_id: str,
+    evidence_id: str | None,
+    expected_source: str,
+    invalid_code: str,
+    request: Request,
+) -> dict[str, Any] | None:
     if evidence_id is None:
         return None
     evidence = repository.get_evidence(project_id, evidence_id)
     if evidence is None:
-        raise _error(status.HTTP_404_NOT_FOUND, request, "evidence_not_found", "Evidence was not found.")
+        raise _error(
+            status.HTTP_404_NOT_FOUND,
+            request,
+            "evidence_not_found",
+            "Evidence was not found.",
+        )
     if evidence["source"] != expected_source:
-        raise _error(status.HTTP_400_BAD_REQUEST, request, invalid_code, f"TASK-304 requires {expected_source} evidence for this field.")
+        raise _error(
+            status.HTTP_400_BAD_REQUEST,
+            request,
+            invalid_code,
+            f"TASK-304 requires {expected_source} evidence for this field.",
+        )
     return evidence
 
 
