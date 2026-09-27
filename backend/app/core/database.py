@@ -213,6 +213,33 @@ def initialize_database(settings: Settings) -> None:
                 FOREIGN KEY (procedure_id) REFERENCES procedures(procedure_id)
             );
 
+            CREATE TABLE IF NOT EXISTS data_reconciliation_runs (
+                reconciliation_run_id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                contract_evidence_id TEXT,
+                revenue_recognition_evidence_id TEXT,
+                revenue_risk_evidence_id TEXT,
+                evidence_id TEXT,
+                status TEXT NOT NULL,
+                overall_exception_level TEXT NOT NULL,
+                coverage_json TEXT NOT NULL,
+                nodes_json TEXT NOT NULL,
+                matched_links_json TEXT NOT NULL,
+                exceptions_json TEXT NOT NULL,
+                limitations_json TEXT NOT NULL,
+                source_evidence_ids_json TEXT NOT NULL,
+                engine_type TEXT NOT NULL,
+                rules_version TEXT NOT NULL,
+                conclusion TEXT NOT NULL,
+                requires_review INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (project_id) REFERENCES projects(project_id),
+                FOREIGN KEY (contract_evidence_id) REFERENCES evidence(evidence_id),
+                FOREIGN KEY (revenue_recognition_evidence_id) REFERENCES evidence(evidence_id),
+                FOREIGN KEY (revenue_risk_evidence_id) REFERENCES evidence(evidence_id),
+                FOREIGN KEY (evidence_id) REFERENCES evidence(evidence_id)
+            );
+
             CREATE TABLE IF NOT EXISTS dataset_quality_snapshots (
                 dataset_quality_id TEXT PRIMARY KEY,
                 project_id TEXT NOT NULL,

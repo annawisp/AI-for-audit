@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.routes.contract_extraction import router as contract_extraction_router
+from app.api.routes.data_reconciliation import router as data_reconciliation_router
 from app.api.routes.document_parse import router as document_parse_router
 from app.api.routes.documents import router as documents_router
 from app.api.routes.evidence import router as evidence_router
@@ -18,6 +19,7 @@ api_router.include_router(document_parse_router)
 api_router.include_router(contract_extraction_router)
 api_router.include_router(revenue_recognition_router)
 api_router.include_router(revenue_risk_router)
+api_router.include_router(data_reconciliation_router)
 api_router.include_router(evidence_router)
 api_router.include_router(normalization_router)
 api_router.include_router(project_context_router)

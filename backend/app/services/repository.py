@@ -50,6 +50,21 @@ def _dataset_quality_row_to_dict(row: Any) -> dict[str, Any] | None:
     return item
 
 
+def _data_reconciliation_run_row_to_dict(row: Any) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    item = dict(row)
+    item["coverage"] = json.loads(str(item.pop("coverage_json")))
+    item["nodes"] = json.loads(str(item.pop("nodes_json")))
+    item["matched_links"] = json.loads(str(item.pop("matched_links_json")))
+    item["exceptions"] = json.loads(str(item.pop("exceptions_json")))
+    item["limitations"] = json.loads(str(item.pop("limitations_json")))
+    item["source_evidence_ids"] = json.loads(str(item.pop("source_evidence_ids_json")))
+    item["coverage_ratio"] = item["coverage"]["coverage_ratio"]
+    item["requires_review"] = bool(item["requires_review"])
+    return item
+
+
 class AuditRepository:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -443,6 +458,92 @@ class AuditRepository:
                 (project_id,),
             ).fetchall()
         return [item for row in rows if (item := _dataset_quality_row_to_dict(row)) is not None]
+
+    def create_data_reconciliation_run(
+        self,
+        *,
+        project_id: str,
+        contract_evidence_id: str | None,
+        revenue_recognition_evidence_id: str | None,
+        revenue_risk_evidence_id: str | None,
+        evidence_id: str,
+        status: str,
+        overall_exception_level: str,
+        coverage: dict[str, Any],
+        nodes: list[dict[str, Any]],
+        matched_links: list[dict[str, Any]],
+        exceptions: list[dict[str, Any]],
+        limitations: list[str],
+        source_evidence_ids: list[str],
+        engine_type: str,
+        rules_version: str,
+        conclusion: str,
+    ) -> dict[str, Any]:
+        reconciliation_run_id = str(uuid4())
+        timestamp = utc_now()
+        requires_review = any(bool(item.get("requires_review")) for item in exceptions)
+        with get_connection(self.settings) as connection:
+            connection.execute(
+                """
+                INSERT INTO data_reconciliation_runs (
+                    reconciliation_run_id, project_id, contract_evidence_id,
+                    revenue_recognition_evidence_id, revenue_risk_evidence_id,
+                    evidence_id, status, overall_exception_level, coverage_json,
+                    nodes_json, matched_links_json, exceptions_json, limitations_json,
+                    source_evidence_ids_json, engine_type, rules_version, conclusion,
+                    requires_review, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    reconciliation_run_id,
+                    project_id,
+                    contract_evidence_id,
+                    revenue_recognition_evidence_id,
+                    revenue_risk_evidence_id,
+                    evidence_id,
+                    status,
+                    overall_exception_level,
+                    _json_dumps(coverage),
+                    _json_dumps(nodes),
+                    _json_dumps(matched_links),
+                    _json_dumps(exceptions),
+                    _json_dumps(limitations),
+                    _json_dumps(source_evidence_ids),
+                    engine_type,
+                    rules_version,
+                    conclusion,
+                    int(requires_review),
+                    timestamp,
+                ),
+            )
+            row = connection.execute(
+                """
+                SELECT * FROM data_reconciliation_runs
+                WHERE project_id = ? AND reconciliation_run_id = ?
+                """,
+                (project_id, reconciliation_run_id),
+            ).fetchone()
+        item = _data_reconciliation_run_row_to_dict(row)
+        if item is None:
+            raise RuntimeError("Created data reconciliation run could not be loaded")
+        return item
+
+    def list_data_reconciliation_runs(self, project_id: str) -> list[dict[str, Any]]:
+        with get_connection(self.settings) as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM data_reconciliation_runs
+                WHERE project_id = ?
+                ORDER BY created_at DESC
+                """,
+                (project_id,),
+            ).fetchall()
+        return [
+            item
+            for row in rows
+            if (item := _data_reconciliation_run_row_to_dict(row)) is not None
+        ]
 
     def _get_evidence_with_connection(
         self,
