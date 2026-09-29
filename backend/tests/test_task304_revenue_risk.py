@@ -1,6 +1,7 @@
 import asyncio
 from pathlib import Path
 
+from app.capabilities.revenue_risk import identify_revenue_risks
 from app.core.config import get_settings
 from tests.asgi_client import app_client
 
@@ -20,7 +21,23 @@ def test_revenue_risk_identifies_review_signal_from_contract_evidence(
                 client,
                 project_id,
                 "capability:contract_extraction",
-                {"raw_text": "合同包含多个履约义务，存在验收条件和收入分摊判断。"},
+                {
+                    "fields": [
+                        {
+                            "field_name": "performance_obligations",
+                            "status": "EXTRACTED",
+                            "value": [
+                                {"value": "提供软件订阅服务"},
+                                {"value": "提供上线实施服务"},
+                            ],
+                        },
+                        {
+                            "field_name": "acceptance_terms",
+                            "status": "EXTRACTED",
+                            "value": "上线后验收",
+                        },
+                    ]
+                },
             )
             response = await client.post(
                 f"/api/v1/projects/{project_id}/revenue-risk",
@@ -43,6 +60,85 @@ def test_revenue_risk_identifies_review_signal_from_contract_evidence(
     )
     assert list_response.status_code == 200
     assert list_response.json()["total"] == 1
+
+
+def test_revenue_risk_uses_structured_fields_not_schema_keywords() -> None:
+    result = identify_revenue_risks(
+        project={"name": "TASK-402"},
+        contract_evidence={
+            "evidence_id": "E-1",
+            "extracted_value": {
+                "fields": [
+                    {
+                        "field_name": "performance_obligations",
+                        "status": "EXTRACTED",
+                        "value": [{"value": "提供软件订阅服务"}],
+                    },
+                    {
+                        "field_name": "acceptance_terms",
+                        "status": "NOT_APPLICABLE",
+                        "value": None,
+                        "abstention_reason": "field_not_applicable_to_contract",
+                    },
+                ],
+                "performance_obligation_assessment": {
+                    "allocation_basis": "字段名中出现 allocation 不应触发风险"
+                },
+            },
+        },
+        revenue_recognition_evidence=None,
+        revenue_records=[],
+    )
+
+    assert result["status"] == "COMPLETED"
+    assert result["overall_risk_level"] == "LOW"
+    assert not any(
+        signal["signal_id"] == "multiple_obligation_allocation"
+        for signal in result["risk_signals"]
+    )
+    assert not any(
+        signal["signal_id"] == "cutoff_acceptance"
+        for signal in result["risk_signals"]
+    )
+    assert all(signal["is_audit_conclusion"] is False for signal in result["risk_signals"])
+
+
+def test_revenue_risk_abstains_without_evidence_or_records() -> None:
+    result = identify_revenue_risks(
+        project={"name": "TASK-403"},
+        contract_evidence=None,
+        revenue_recognition_evidence=None,
+        revenue_records=[],
+    )
+
+    assert result["status"] == "ABSTAINED"
+    assert result["overall_risk_level"] is None
+    assert result["risk_signals"][0]["status"] == "NEED_MORE_EVIDENCE"
+    assert result["risk_signals"][0]["risk_level"] is None
+
+
+def test_revenue_risk_conflicting_acceptance_terms_do_not_pick_a_side() -> None:
+    result = identify_revenue_risks(
+        project={"name": "TASK-402"},
+        contract_evidence={
+            "evidence_id": "E-1",
+            "extracted_value": {
+                "fields": [
+                    {
+                        "field_name": "acceptance_terms",
+                        "status": "CONFLICTING_EVIDENCE",
+                        "value": ["需验收", "无需验收"],
+                    }
+                ]
+            },
+        },
+        revenue_recognition_evidence=None,
+        revenue_records=[],
+    )
+
+    assert result["status"] == "REQUIRES_REVIEW"
+    assert result["overall_risk_level"] is None
+    assert any(signal["status"] == "CONFLICTING" for signal in result["risk_signals"])
 
 
 def test_revenue_risk_accepts_revenue_records_and_creates_evidence(

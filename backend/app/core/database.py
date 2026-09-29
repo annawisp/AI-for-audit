@@ -223,7 +223,7 @@ def initialize_database(settings: Settings) -> None:
                 revenue_risk_evidence_id TEXT,
                 evidence_id TEXT,
                 status TEXT NOT NULL,
-                overall_exception_level TEXT NOT NULL,
+                overall_exception_level TEXT,
                 coverage_json TEXT NOT NULL,
                 nodes_json TEXT NOT NULL,
                 matched_links_json TEXT NOT NULL,

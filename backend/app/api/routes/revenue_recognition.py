@@ -185,6 +185,13 @@ def _load_contract_evidence(
             "invalid_contract_evidence_source",
             "TASK-303 requires TASK-302 contract extraction evidence.",
         )
+    if evidence["judgment_status"] == "REJECTED":
+        raise _error(
+            status.HTTP_400_BAD_REQUEST,
+            request,
+            "rejected_evidence_not_allowed",
+            "Rejected evidence cannot be used as downstream input.",
+        )
     return evidence
 
 

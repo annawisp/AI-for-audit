@@ -1,7 +1,9 @@
 import asyncio
 from pathlib import Path
 
+from app.capabilities.data_reconciliation import run_data_reconciliation
 from app.core.config import get_settings
+from app.schemas.data_reconciliation import ReconciliationRecord
 from tests.asgi_client import app_client
 
 
@@ -174,6 +176,98 @@ def test_task305_rejects_wrong_contract_evidence_source(monkeypatch, tmp_path: P
     assert response.json()["detail"]["code"] == "invalid_contract_evidence_source"
 
 
+def test_task406_does_not_reuse_one_receivable_for_two_revenue_records() -> None:
+    result = run_data_reconciliation(
+        project={"name": "TASK-406"},
+        contract_evidence=None,
+        revenue_recognition_evidence=None,
+        revenue_risk_evidence=None,
+        revenue_records=[
+            _reconciliation_record("REV-1"),
+            _reconciliation_record("REV-2"),
+        ],
+        receivable_records=[_reconciliation_record("AR-1")],
+        cash_receipt_records=[],
+    )
+
+    revenue_ar = _result_node(result, "revenue_receivable_matching")
+    assert revenue_ar.matched_count == 1
+    assert revenue_ar.unmatched_count == 1
+    assert any(link.match_status == "AMBIGUOUS" for link in result.matched_links)
+
+
+def test_task406_invoice_match_with_conflicting_identity_is_not_matched() -> None:
+    result = run_data_reconciliation(
+        project={"name": "TASK-406"},
+        contract_evidence=None,
+        revenue_recognition_evidence=None,
+        revenue_risk_evidence=None,
+        revenue_records=[
+            _reconciliation_record("REV-1", invoice_number="INV-1", amount="1000")
+        ],
+        receivable_records=[
+            _reconciliation_record(
+                "AR-1",
+                invoice_number="INV-1",
+                contract_reference="CON-2",
+                customer_name="OTHER",
+                amount="9000",
+            )
+        ],
+        cash_receipt_records=[],
+    )
+
+    revenue_ar = _result_node(result, "revenue_receivable_matching")
+    assert revenue_ar.status == "CONFLICTING"
+    assert revenue_ar.matched_count == 0
+    assert any(link.match_status == "CONFLICTING" for link in result.matched_links)
+    assert result.overall_exception_level == "high"
+
+
+def test_task406_contract_amount_normalizes_wan_unit() -> None:
+    result = run_data_reconciliation(
+        project={"name": "TASK-406"},
+        contract_evidence={
+            "evidence_id": "E-1",
+            "source": "capability:contract_extraction",
+            "extracted_value": {
+                "fields": [
+                    {"field_name": "transaction_price", "value": "人民币100万元"},
+                    {"field_name": "customer_party", "value": "客户A"},
+                ]
+            },
+        },
+        revenue_recognition_evidence=None,
+        revenue_risk_evidence=None,
+        revenue_records=[
+            _reconciliation_record("REV-1", customer_name="客户A", amount="1000000")
+        ],
+        receivable_records=[],
+        cash_receipt_records=[],
+    )
+
+    contract_node = _result_node(result, "contract_revenue_matching")
+    assert contract_node.status == "COMPLETE"
+    assert contract_node.matched_count == 1
+    assert not contract_node.exceptions
+
+
+def test_task406_empty_inputs_have_no_business_low_exception_level() -> None:
+    result = run_data_reconciliation(
+        project={"name": "TASK-406"},
+        contract_evidence=None,
+        revenue_recognition_evidence=None,
+        revenue_risk_evidence=None,
+        revenue_records=[],
+        receivable_records=[],
+        cash_receipt_records=[],
+    )
+
+    assert result.status == "INSUFFICIENT_DATA"
+    assert result.overall_exception_level is None
+    assert result.coverage.coverage_ratio == 0
+
+
 async def _create_project(client):  # type: ignore[no-untyped-def]
     response = await client.post(
         "/api/v1/projects",
@@ -246,5 +340,29 @@ def _record(
     }
 
 
+def _reconciliation_record(
+    record_id: str,
+    *,
+    invoice_number: str = "INV-1",
+    contract_reference: str = "CON-1",
+    customer_name: str = "ACME",
+    amount: str = "1000",
+) -> ReconciliationRecord:
+    return ReconciliationRecord(
+        record_id=record_id,
+        contract_reference=contract_reference,
+        customer_name=customer_name,
+        invoice_number=invoice_number,
+        recognition_date="2026-03-31",
+        due_date="2026-04-30",
+        receipt_date="2026-04-15",
+        amount=amount,
+    )
+
+
 def _node(payload: dict, node_id: str) -> dict:  # type: ignore[type-arg]
     return next(node for node in payload["nodes"] if node["node_id"] == node_id)
+
+
+def _result_node(result, node_id: str):  # type: ignore[no-untyped-def]
+    return next(node for node in result.nodes if node.node_id == node_id)

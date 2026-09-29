@@ -22,7 +22,7 @@ AMOUNT_TOLERANCE = Decimal("0.01")
 @dataclass(frozen=True)
 class DataReconciliationResult:
     status: str
-    overall_exception_level: str
+    overall_exception_level: str | None
     coverage: ReconciliationCoverage
     nodes: list[ReconciliationNode]
     matched_links: list[MatchedLink]
@@ -34,6 +34,15 @@ class DataReconciliationResult:
     confidence_level: str
     node_status: str
     judgment_status: str
+
+
+@dataclass(frozen=True)
+class MatchDecision:
+    source: ReconciliationRecord
+    target: ReconciliationRecord | None
+    status: str
+    reason: str
+    amount_difference: Decimal | None = None
 
 
 def run_data_reconciliation(
@@ -87,7 +96,7 @@ def run_data_reconciliation(
         receivable_records,
         cash_receipt_records,
     )
-    overall_exception_level = _overall_exception_level(exceptions)
+    overall_exception_level = _overall_exception_level(status, exceptions)
     requires_review = any(exception.requires_review for exception in exceptions)
     conclusion = _conclusion(status, overall_exception_level, exceptions, coverage)
 
@@ -187,7 +196,7 @@ def _contract_revenue_node(
                 "contract_revenue_amount_mismatch",
                 "amount_mismatch",
                 "high",
-                "COMPLETE",
+                "CONFLICTING",
                 "Contract amount does not agree to total revenue records.",
                 f"Contract amount {contract_amount} differs from revenue total {revenue_total}.",
                 _record_ids(revenue_records),
@@ -205,7 +214,7 @@ def _contract_revenue_node(
                 "contract_revenue_customer_mismatch",
                 "customer_mismatch",
                 "medium",
-                "COMPLETE",
+                "CONFLICTING",
                 "No revenue record customer appears to match the contract customer.",
                 f"Contract customer '{customer}' was not found in revenue record customer fields.",
                 _record_ids(revenue_records),
@@ -216,16 +225,22 @@ def _contract_revenue_node(
             )
         )
 
+    matched_count = len(revenue_records) if not exceptions else 0
+    unmatched_count = len(revenue_records) - matched_count
     link_confidence = "HIGH" if contract_amount is not None and not exceptions else "MEDIUM"
-    status = "PARTIAL" if any(item.status == "PARTIAL" for item in exceptions) else "COMPLETE"
+    status = "COMPLETE"
+    if any(item.status == "CONFLICTING" for item in exceptions):
+        status = "CONFLICTING"
+    elif any(item.status == "PARTIAL" for item in exceptions):
+        status = "PARTIAL"
     return ReconciliationNode(
         node_id="contract_revenue_matching",
         node_name="Contract to revenue matching",
         status=status,
         link_method="contract_amount_and_customer",
         link_confidence=link_confidence,
-        matched_count=len(revenue_records) - len(exceptions),
-        unmatched_count=len(exceptions),
+        matched_count=matched_count,
+        unmatched_count=unmatched_count,
         exceptions=exceptions,
         basis="Compared contract extracted fields with provided revenue records.",
         limitations=[],
@@ -289,31 +304,39 @@ def _record_matching_node(
     target_records: list[ReconciliationRecord],
     exception_prefix: str,
 ) -> ReconciliationNode:
-    matched = 0
+    decisions = _match_records(source_records, target_records)
+    matched = sum(1 for decision in decisions if decision.status == "MATCHED")
     exceptions: list[ReconciliationException] = []
-    for source in source_records:
-        target = _find_record_match(source, target_records)
-        if target is not None:
-            matched += 1
+    for decision in decisions:
+        if decision.status == "MATCHED":
             continue
+        status = "CONFLICTING" if decision.status == "CONFLICTING" else decision.status
+        severity = "high" if decision.status == "CONFLICTING" else "medium"
         exceptions.append(
             _exception(
-                f"{exception_prefix}_unmatched_{_record_key(source)}",
-                "unmatched_record",
-                "medium",
-                "UNMATCHED",
-                f"No matching target record was found for {node_name}.",
-                "Matching used contract reference, invoice number, customer, and amount.",
-                [_record_key(source)],
+                f"{exception_prefix}_{decision.status.lower()}_{_record_key(decision.source)}",
+                f"{decision.status.lower()}_record",
+                severity,
+                status,
+                f"{node_name} returned {decision.status}.",
+                decision.reason,
+                [_record_key(decision.source)],
                 "Review unmatched records and complete missing linking keys.",
                 True,
-                match_status="UNMATCHED",
+                match_status=decision.status,
             )
         )
+    node_status = "COMPLETE"
+    if any(decision.status == "CONFLICTING" for decision in decisions):
+        node_status = "CONFLICTING"
+    elif any(decision.status == "AMBIGUOUS" for decision in decisions):
+        node_status = "AMBIGUOUS"
+    elif exceptions:
+        node_status = "UNMATCHED"
     return ReconciliationNode(
         node_id=node_id,
         node_name=node_name,
-        status="UNMATCHED" if exceptions else "COMPLETE",
+        status=node_status,
         link_method="reference_invoice_customer_amount",
         link_confidence="HIGH" if matched == len(source_records) else "MEDIUM",
         matched_count=matched,
@@ -577,7 +600,17 @@ def _extract_contract_amount(fields: dict[str, dict[str, Any]]) -> Decimal | Non
     match = re.search(r"[-+]?\d[\d,]*(?:\.\d+)?", text)
     if match is None:
         return None
-    return _to_decimal(match.group(0).replace(",", ""))
+    amount = _to_decimal(match.group(0).replace(",", ""))
+    if amount is None:
+        return None
+    unit_text = text[match.end() : match.end() + 3]
+    if "万" in unit_text:
+        amount *= Decimal("10000")
+    elif "千" in unit_text:
+        amount *= Decimal("1000")
+    elif "百" in unit_text:
+        amount *= Decimal("100")
+    return amount
 
 
 def _sum_amounts(records: list[ReconciliationRecord]) -> Decimal | None:
@@ -608,28 +641,112 @@ def _parse_date(value: str | None) -> date | None:
         return None
 
 
-def _find_record_match(
-    source: ReconciliationRecord,
+def _match_records(
+    sources: list[ReconciliationRecord],
     targets: list[ReconciliationRecord],
-) -> ReconciliationRecord | None:
-    for target in targets:
-        if source.invoice_number and source.invoice_number == target.invoice_number:
-            return target
-        if source.contract_reference and source.contract_reference == target.contract_reference:
-            source_amount = _to_decimal(source.amount)
-            target_amount = _to_decimal(target.amount)
-            if source_amount is not None and target_amount is not None:
-                if abs(source_amount - target_amount) <= AMOUNT_TOLERANCE:
-                    return target
-    for target in targets:
-        if _normalize_text(source.customer_name) != _normalize_text(target.customer_name):
+) -> list[MatchDecision]:
+    used_targets: set[str] = set()
+    decisions: list[MatchDecision] = []
+    for source in sources:
+        source_key = _record_key(source)
+        candidates = [
+            target
+            for target in targets
+            if _has_same_identity(source, target)
+        ]
+        if not candidates:
+            invoice_candidates = [
+                target
+                for target in targets
+                if source.invoice_number and source.invoice_number == target.invoice_number
+            ]
+            if invoice_candidates:
+                decisions.append(
+                    MatchDecision(
+                        source,
+                        invoice_candidates[0],
+                        "CONFLICTING",
+                        "Invoice number matched, but contract reference or customer differed.",
+                    )
+                )
+                continue
+            decisions.append(
+                MatchDecision(
+                    source,
+                    None,
+                    "UNMATCHED",
+                    "No target record matched contract reference, invoice number, and customer.",
+                )
+            )
+            continue
+        if len(candidates) > 1:
+            decisions.append(
+                MatchDecision(
+                    source,
+                    None,
+                    "AMBIGUOUS",
+                    "Multiple target records matched the same identity fields.",
+                )
+            )
+            continue
+        target = candidates[0]
+        target_key = _record_key(target)
+        if target_key in used_targets:
+            decisions.append(
+                MatchDecision(
+                    source,
+                    target,
+                    "AMBIGUOUS",
+                    "Target record was already consumed by another source record.",
+                )
+            )
             continue
         source_amount = _to_decimal(source.amount)
         target_amount = _to_decimal(target.amount)
-        if source_amount is not None and target_amount is not None:
-            if abs(source_amount - target_amount) <= AMOUNT_TOLERANCE:
-                return target
-    return None
+        if source_amount is None or target_amount is None:
+            decisions.append(
+                MatchDecision(
+                    source,
+                    target,
+                    "INSUFFICIENT_DATA",
+                    "Amount comparison requires valid source and target amounts.",
+                )
+            )
+            continue
+        amount_difference = target_amount - source_amount
+        if abs(amount_difference) > AMOUNT_TOLERANCE:
+            decisions.append(
+                MatchDecision(
+                    source,
+                    target,
+                    "CONFLICTING",
+                    "Identity fields matched, but amount difference exceeded tolerance.",
+                    amount_difference,
+                )
+            )
+            continue
+        used_targets.add(target_key)
+        decisions.append(
+            MatchDecision(
+                source,
+                target,
+                "MATCHED",
+                "Contract reference, invoice, customer, and amount matched.",
+                amount_difference,
+            )
+        )
+        _ = source_key
+    return decisions
+
+
+def _has_same_identity(source: ReconciliationRecord, target: ReconciliationRecord) -> bool:
+    if not source.invoice_number or source.invoice_number != target.invoice_number:
+        return False
+    if not source.contract_reference or source.contract_reference != target.contract_reference:
+        return False
+    if _normalize_text(source.customer_name) != _normalize_text(target.customer_name):
+        return False
+    return bool(_normalize_text(source.customer_name))
 
 
 def _link_method(
@@ -821,20 +938,6 @@ def _matched_links_from_inputs(
     cash_receipt_records: list[ReconciliationRecord],
 ) -> list[MatchedLink]:
     links: list[MatchedLink] = []
-    if contract_evidence is not None:
-        for revenue in revenue_records:
-            links.append(
-                MatchedLink(
-                    source_record_id=str(contract_evidence.get("evidence_id")),
-                    target_record_id=_record_key(revenue),
-                    source_type="contract_evidence",
-                    target_type="revenue_record",
-                    match_status="MATCHED",
-                    link_method="contract_evidence_to_revenue_population",
-                    link_confidence="MEDIUM",
-                    basis="Revenue record was included in contract-to-revenue matching.",
-                )
-            )
     links.extend(
         _record_level_links(
             source_records=revenue_records,
@@ -867,34 +970,35 @@ def _record_level_links(
     if not source_records or not target_records:
         return []
     links: list[MatchedLink] = []
-    for source in source_records:
-        target = _find_record_match(source, target_records)
-        if target is None:
+    for decision in _match_records(source_records, target_records):
+        if decision.target is None:
             links.append(
                 MatchedLink(
-                    source_record_id=_record_key(source),
+                    source_record_id=_record_key(decision.source),
                     target_record_id=None,
                     source_type=source_type,
                     target_type=target_type,
-                    match_status="UNMATCHED",
+                    match_status=decision.status,
                     link_method=link_method,
                     link_confidence="NONE",
-                    basis="No target record matched by reference, invoice, customer, or amount.",
+                    basis=decision.reason,
                 )
             )
             continue
         links.append(
             MatchedLink(
-                source_record_id=_record_key(source),
-                target_record_id=_record_key(target),
+                source_record_id=_record_key(decision.source),
+                target_record_id=_record_key(decision.target),
                 source_type=source_type,
                 target_type=target_type,
-                match_status="MATCHED",
-                link_method=_link_method(source, target, link_method),
-                link_confidence=_link_confidence(source, target),
-                amount_difference=_amount_difference(source, target),
-                date_difference_days=_date_difference_days(source, target),
-                basis="Matched record using available reference fields and amount comparison.",
+                match_status=decision.status,
+                link_method=_link_method(decision.source, decision.target, link_method),
+                link_confidence="HIGH" if decision.status == "MATCHED" else "LOW",
+                amount_difference=float(decision.amount_difference)
+                if decision.amount_difference is not None
+                else _amount_difference(decision.source, decision.target),
+                date_difference_days=_date_difference_days(decision.source, decision.target),
+                basis=decision.reason,
             )
         )
     return links
@@ -909,7 +1013,7 @@ def _coverage(nodes: list[ReconciliationNode]) -> ReconciliationCoverage:
         for node in nodes
         if node.status not in {"INSUFFICIENT_DATA", "NOT_APPLICABLE", "NOT_PROVIDED"}
     ]
-    denominator = len(nodes) - len(not_applicable) - len(not_provided)
+    denominator = len(nodes) - len(not_applicable)
     ratio = len(assessable) / denominator if denominator else 0
     return ReconciliationCoverage(
         total_nodes=len(nodes),
@@ -939,14 +1043,28 @@ def _overall_status(
     ):
         return "INSUFFICIENT_DATA"
     if any(
-        node.status in {"PARTIAL", "INSUFFICIENT_DATA", "NOT_PROVIDED", "UNMATCHED"}
+        node.status
+        in {
+            "PARTIAL",
+            "INSUFFICIENT_DATA",
+            "NOT_PROVIDED",
+            "UNMATCHED",
+            "AMBIGUOUS",
+            "CONFLICTING",
+            "CONFLICTING_EVIDENCE",
+        }
         for node in nodes
     ):
         return "PARTIAL"
     return "COMPLETE"
 
 
-def _overall_exception_level(exceptions: list[ReconciliationException]) -> str:
+def _overall_exception_level(
+    status: str,
+    exceptions: list[ReconciliationException],
+) -> str | None:
+    if status == "INSUFFICIENT_DATA" and not exceptions:
+        return None
     if any(exception.severity == "high" for exception in exceptions):
         return "high"
     if any(exception.severity == "medium" for exception in exceptions):
@@ -983,7 +1101,7 @@ def _limitations(
 
 def _conclusion(
     status: str,
-    overall_exception_level: str,
+    overall_exception_level: str | None,
     exceptions: list[ReconciliationException],
     coverage: ReconciliationCoverage,
 ) -> str:
@@ -995,7 +1113,7 @@ def _conclusion(
     if exceptions:
         return (
             f"Data reconciliation identified {len(exceptions)} exception(s); "
-            f"overall exception level is {overall_exception_level}; "
+            f"overall exception level is {overall_exception_level or 'not assessed'}; "
             f"coverage ratio is {coverage.coverage_ratio:.2%}."
         )
     return (

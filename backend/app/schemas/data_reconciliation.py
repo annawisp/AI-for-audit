@@ -11,7 +11,9 @@ ReconciliationStatus = Literal[
     "NOT_APPLICABLE",
     "REQUIRES_REVIEW",
     "CONFLICTING_EVIDENCE",
+    "CONFLICTING",
     "UNMATCHED",
+    "AMBIGUOUS",
     "LOW_CONFIDENCE",
 ]
 RunStatus = Literal["COMPLETE", "PARTIAL", "INSUFFICIENT_DATA"]
@@ -23,6 +25,8 @@ MatchStatus = Literal[
     "NOT_PROVIDED",
     "INSUFFICIENT_DATA",
     "LOW_CONFIDENCE",
+    "AMBIGUOUS",
+    "CONFLICTING",
 ]
 EngineType = Literal["rule_based"]
 
@@ -119,7 +123,7 @@ class DataReconciliationResponse(BaseModel):
     evidence_id: str | None
     source_evidence_ids: list[str]
     status: RunStatus
-    overall_exception_level: Severity
+    overall_exception_level: Severity | None
     coverage: ReconciliationCoverage
     coverage_ratio: float
     nodes: list[ReconciliationNode]

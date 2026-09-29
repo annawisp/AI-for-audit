@@ -468,7 +468,7 @@ class AuditRepository:
         revenue_risk_evidence_id: str | None,
         evidence_id: str,
         status: str,
-        overall_exception_level: str,
+        overall_exception_level: str | None,
         coverage: dict[str, Any],
         nodes: list[dict[str, Any]],
         matched_links: list[dict[str, Any]],

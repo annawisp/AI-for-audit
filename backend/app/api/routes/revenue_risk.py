@@ -58,6 +58,7 @@ def create_revenue_risk(
         "invalid_revenue_recognition_evidence_source",
         request,
     )
+    _ensure_same_document(request, contract_evidence, recognition_evidence)
     result = identify_revenue_risks(
         project=project,
         contract_evidence=contract_evidence,
@@ -178,6 +179,13 @@ def _load_optional_evidence(
             invalid_code,
             f"TASK-304 requires {expected_source} evidence for this field.",
         )
+    if evidence["judgment_status"] == "REJECTED":
+        raise _error(
+            status.HTTP_400_BAD_REQUEST,
+            request,
+            "rejected_evidence_not_allowed",
+            "Rejected evidence cannot be used as downstream input.",
+        )
     return evidence
 
 
@@ -186,3 +194,21 @@ def _document_id(*evidence_items: dict[str, Any] | None) -> str | None:
         if evidence and evidence.get("document_id"):
             return str(evidence["document_id"])
     return None
+
+
+def _ensure_same_document(
+    request: Request,
+    *evidence_items: dict[str, Any] | None,
+) -> None:
+    document_ids = {
+        str(evidence["document_id"])
+        for evidence in evidence_items
+        if evidence and evidence.get("document_id")
+    }
+    if len(document_ids) > 1:
+        raise _error(
+            status.HTTP_400_BAD_REQUEST,
+            request,
+            "evidence_document_mismatch",
+            "Upstream evidence items must refer to the same document.",
+        )

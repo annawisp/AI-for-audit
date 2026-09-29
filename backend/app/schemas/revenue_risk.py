@@ -21,10 +21,17 @@ class RevenueRiskRequest(BaseModel):
 class RevenueRiskSignal(BaseModel):
     signal_id: str
     name: str
-    risk_level: Literal["LOW", "MEDIUM", "HIGH"]
-    status: Literal["COMPLETED", "REQUIRES_REVIEW", "ABSTAINED"]
+    risk_level: Literal["LOW", "MEDIUM", "HIGH"] | None = None
+    status: Literal[
+        "COMPLETED",
+        "REQUIRES_REVIEW",
+        "ABSTAINED",
+        "NEED_MORE_EVIDENCE",
+        "CONFLICTING",
+    ]
     rationale: str
     source: str
+    is_audit_conclusion: bool = False
 
 
 class RevenueRiskCoverage(BaseModel):
@@ -42,8 +49,8 @@ class RevenueRiskResponse(BaseModel):
     run_id: str
     project_id: str
     evidence_id: str
-    status: Literal["COMPLETED", "REQUIRES_REVIEW"]
-    overall_risk_level: Literal["LOW", "MEDIUM", "HIGH"]
+    status: Literal["COMPLETED", "REQUIRES_REVIEW", "ABSTAINED", "NEED_MORE_EVIDENCE"]
+    overall_risk_level: Literal["LOW", "MEDIUM", "HIGH"] | None = None
     coverage: RevenueRiskCoverage
     coverage_ratio: float
     rule_coverage_ratio: float
