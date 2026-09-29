@@ -17,6 +17,7 @@ ConfidenceLevel = Literal["low", "medium", "high"]
 
 class ContractExtractionRequest(BaseModel):
     extractor_type: ExtractorType = "rule_based"
+    parse_run_id: str | None = None
 
 
 class SourceLocation(BaseModel):
@@ -47,6 +48,7 @@ class ContractExtractionResponse(BaseModel):
     extraction_run_id: str
     project_id: str
     document_id: str
+    parse_run_id: str | None = None
     evidence_id: str | None
     status: ExtractionStatus
     extractor_type: ExtractorType

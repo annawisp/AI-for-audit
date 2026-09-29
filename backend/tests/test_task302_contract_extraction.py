@@ -77,6 +77,118 @@ def test_contract_extraction_creates_single_evidence_from_parsed_chunks(
     assert list_response.json()["total"] == 1
 
 
+def test_contract_extraction_is_bound_to_one_parse_run_after_repeated_parses(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    settings = get_settings()
+    monkeypatch.setattr(settings, "database_path", str(tmp_path / "audit.sqlite3"))
+    monkeypatch.setattr(settings, "upload_dir", str(tmp_path / "uploads"))
+
+    async def scenario():  # type: ignore[no-untyped-def]
+        async with app_client() as client:
+            project_id, document_id = await _upload_contract(
+                client,
+                "\n".join(
+                    [
+                        "甲方：北京客户有限公司",
+                        "乙方：收入科技有限公司",
+                        "合同期间：2026年度",
+                        "服务内容：软件订阅服务",
+                        "履约义务：提供软件订阅服务",
+                        "合同金额：人民币100万元",
+                        "付款条件：客户应在验收后30日内付款",
+                        "验收条件：客户完成系统验收确认",
+                        "违约责任：逾期付款按日计收违约金",
+                    ]
+                ).encode(),
+            )
+            parse_responses = [
+                await client.post(
+                    f"/api/v1/projects/{project_id}/documents/{document_id}/parse",
+                    json={},
+                )
+                for _ in range(3)
+            ]
+            parse_run_ids = [
+                response.json()["parse_run_id"] for response in parse_responses
+            ]
+            default_extraction = await client.post(
+                f"/api/v1/projects/{project_id}/documents/{document_id}/contract-extraction",
+                json={},
+            )
+            pinned_extractions = [
+                await client.post(
+                    f"/api/v1/projects/{project_id}/documents/{document_id}/contract-extraction",
+                    json={"parse_run_id": parse_run_id},
+                )
+                for parse_run_id in parse_run_ids
+            ]
+            evidence_id = default_extraction.json()["evidence_id"]
+            evidence_response = await client.get(
+                f"/api/v1/projects/{project_id}/evidence/{evidence_id}"
+            )
+            return parse_responses, default_extraction, pinned_extractions, evidence_response
+
+    parse_responses, default_extraction, pinned_extractions, evidence_response = asyncio.run(
+        scenario()
+    )
+
+    assert [response.status_code for response in parse_responses] == [201, 201, 201]
+    parse_run_ids = [response.json()["parse_run_id"] for response in parse_responses]
+    assert len(set(parse_run_ids)) == 3
+
+    assert default_extraction.status_code == 201
+    default_payload = default_extraction.json()
+    assert default_payload["parse_run_id"] in parse_run_ids
+    default_obligations = _field(default_payload, "performance_obligations")
+    assert default_obligations["status"] == "EXTRACTED"
+    assert [item["value"] for item in default_obligations["value"]] == [
+        "提供软件订阅服务"
+    ]
+
+    for parse_run_id, response in zip(parse_run_ids, pinned_extractions, strict=True):
+        assert response.status_code == 201
+        payload = response.json()
+        assert payload["parse_run_id"] == parse_run_id
+        obligations = _field(payload, "performance_obligations")
+        assert [item["value"] for item in obligations["value"]] == [
+            "提供软件订阅服务"
+        ]
+
+    evidence = evidence_response.json()
+    assert evidence["extracted_value"]["parse_run_id"] == default_payload["parse_run_id"]
+
+
+def test_contract_extraction_rejects_unknown_parse_run_without_history_fallback(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    settings = get_settings()
+    monkeypatch.setattr(settings, "database_path", str(tmp_path / "audit.sqlite3"))
+    monkeypatch.setattr(settings, "upload_dir", str(tmp_path / "uploads"))
+
+    async def scenario():  # type: ignore[no-untyped-def]
+        async with app_client() as client:
+            project_id, document_id = await _upload_contract(
+                client,
+                "甲方：北京客户有限公司\n履约义务：提供软件订阅服务\n".encode(),
+            )
+            await client.post(
+                f"/api/v1/projects/{project_id}/documents/{document_id}/parse",
+                json={},
+            )
+            return await client.post(
+                f"/api/v1/projects/{project_id}/documents/{document_id}/contract-extraction",
+                json={"parse_run_id": "missing-parse-run"},
+            )
+
+    response = asyncio.run(scenario())
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "parse_run_not_found"
+
+
 def test_contract_extraction_marks_missing_fields_without_blocking_evidence(
     monkeypatch,
     tmp_path: Path,

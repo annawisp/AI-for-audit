@@ -108,12 +108,14 @@ def fields_for_unavailable_document(status: str) -> list[ContractFieldExtraction
 def build_contract_evidence_value(
     *,
     document_id: str,
+    parse_run_id: str | None,
     fields: list[ContractFieldExtraction],
     extractor_type: str,
 ) -> dict[str, Any]:
     return {
         "capability": "contract_extraction",
         "document_id": document_id,
+        "parse_run_id": parse_run_id,
         "extractor_type": extractor_type,
         "extractor_version": EXTRACTOR_VERSION,
         "fields": [field.model_dump() for field in fields],

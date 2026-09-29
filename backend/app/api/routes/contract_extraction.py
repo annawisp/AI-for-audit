@@ -67,12 +67,19 @@ def create_contract_extraction(
     _ensure_contract_extraction_tables(settings)
     repository = AuditRepository(settings)
     _load_document(repository, project_id, document_id, request)
-    chunks = _list_document_chunks(settings, project_id, document_id)
+    parse_run = _select_parse_run(settings, project_id, document_id, payload.parse_run_id, request)
+    parse_run_id = str(parse_run["parse_run_id"]) if parse_run else None
+    chunks = (
+        _list_document_chunks(settings, project_id, document_id, parse_run_id)
+        if parse_run_id
+        else []
+    )
     if not chunks:
         fields, extraction_status, node_status, failure_reason = _unavailable_fields(
             settings,
             project_id,
             document_id,
+            parse_run,
         )
         evidence = None
     else:
@@ -86,6 +93,7 @@ def create_contract_extraction(
             source="capability:contract_extraction",
             extracted_value=build_contract_evidence_value(
                 document_id=document_id,
+                parse_run_id=parse_run_id,
                 fields=fields,
                 extractor_type=payload.extractor_type,
             ),
@@ -106,6 +114,7 @@ def create_contract_extraction(
         settings=settings,
         project_id=project_id,
         document_id=document_id,
+        parse_run_id=parse_run_id,
         evidence_id=evidence["evidence_id"] if evidence else None,
         status=extraction_status,
         extractor_type=payload.extractor_type,
@@ -172,9 +181,12 @@ def _unavailable_fields(
     settings: Settings,
     project_id: str,
     document_id: str,
+    parse_run: dict[str, Any] | None = None,
 ) -> tuple[list[ContractFieldExtraction], str, str, str]:
-    parse_runs = _list_document_parse_runs(settings, project_id, document_id)
-    if parse_runs and parse_runs[0]["status"] == "OCR_REQUIRED":
+    if parse_run is None:
+        parse_runs = _list_document_parse_runs(settings, project_id, document_id)
+        parse_run = parse_runs[0] if parse_runs else None
+    if parse_run and parse_run["status"] == "OCR_REQUIRED":
         return (
             fields_for_unavailable_document("DOCUMENT_REQUIRES_OCR"),
             "BLOCKED",
@@ -215,6 +227,36 @@ def _document_chunk_row_to_dict(row: Any) -> dict[str, Any] | None:
         return None
     item = dict(row)
     item["content"] = json.loads(str(item.pop("content_json")))
+    return item
+
+
+def _select_parse_run(
+    settings: Settings,
+    project_id: str,
+    document_id: str,
+    requested_parse_run_id: str | None,
+    request: Request,
+) -> dict[str, Any] | None:
+    if requested_parse_run_id is None:
+        parse_runs = _list_document_parse_runs(settings, project_id, document_id)
+        return parse_runs[0] if parse_runs else None
+
+    with get_connection(settings) as connection:
+        row = connection.execute(
+            """
+            SELECT * FROM document_parse_runs
+            WHERE project_id = ? AND document_id = ? AND parse_run_id = ?
+            """,
+            (project_id, document_id, requested_parse_run_id),
+        ).fetchone()
+    item = _parse_run_row_to_dict(row)
+    if item is None:
+        raise _error(
+            status.HTTP_400_BAD_REQUEST,
+            request,
+            "parse_run_not_found",
+            "Requested parse_run_id was not found for this document.",
+        )
     return item
 
 
@@ -273,6 +315,7 @@ def _ensure_contract_extraction_tables(settings: Settings) -> None:
                 extraction_run_id TEXT PRIMARY KEY,
                 project_id TEXT NOT NULL,
                 document_id TEXT NOT NULL,
+                parse_run_id TEXT,
                 evidence_id TEXT,
                 status TEXT NOT NULL,
                 extractor_type TEXT NOT NULL,
@@ -282,10 +325,19 @@ def _ensure_contract_extraction_tables(settings: Settings) -> None:
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (project_id) REFERENCES projects(project_id),
                 FOREIGN KEY (document_id) REFERENCES documents(document_id),
+                FOREIGN KEY (parse_run_id) REFERENCES document_parse_runs(parse_run_id),
                 FOREIGN KEY (evidence_id) REFERENCES evidence(evidence_id)
             );
             """
         )
+        columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(contract_extraction_runs)")
+        }
+        if "parse_run_id" not in columns:
+            connection.execute(
+                "ALTER TABLE contract_extraction_runs ADD COLUMN parse_run_id TEXT"
+            )
 
 
 def _list_document_parse_runs(
@@ -309,15 +361,16 @@ def _list_document_chunks(
     settings: Settings,
     project_id: str,
     document_id: str,
+    parse_run_id: str,
 ) -> list[dict[str, Any]]:
     with get_connection(settings) as connection:
         rows = connection.execute(
             """
             SELECT * FROM document_chunks
-            WHERE project_id = ? AND document_id = ?
-            ORDER BY created_at DESC, sequence_number ASC
+            WHERE project_id = ? AND document_id = ? AND parse_run_id = ?
+            ORDER BY sequence_number ASC, chunk_id ASC
             """,
-            (project_id, document_id),
+            (project_id, document_id, parse_run_id),
         ).fetchall()
     return [item for row in rows if (item := _document_chunk_row_to_dict(row)) is not None]
 
@@ -327,6 +380,7 @@ def _create_contract_extraction_run(
     settings: Settings,
     project_id: str,
     document_id: str,
+    parse_run_id: str | None,
     evidence_id: str | None,
     status: str,
     extractor_type: str,
@@ -340,14 +394,15 @@ def _create_contract_extraction_run(
         connection.execute(
             """
             INSERT INTO contract_extraction_runs (
-                extraction_run_id, project_id, document_id, evidence_id, status,
+                extraction_run_id, project_id, document_id, parse_run_id, evidence_id, status,
                 extractor_type, extractor_version, fields_json, failure_reason, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 extraction_run_id,
                 project_id,
                 document_id,
+                parse_run_id,
                 evidence_id,
                 status,
                 extractor_type,

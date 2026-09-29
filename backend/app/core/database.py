@@ -180,6 +180,7 @@ def initialize_database(settings: Settings) -> None:
                 extraction_run_id TEXT PRIMARY KEY,
                 project_id TEXT NOT NULL,
                 document_id TEXT NOT NULL,
+                parse_run_id TEXT,
                 evidence_id TEXT,
                 status TEXT NOT NULL,
                 extractor_type TEXT NOT NULL,
@@ -189,6 +190,7 @@ def initialize_database(settings: Settings) -> None:
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (project_id) REFERENCES projects(project_id),
                 FOREIGN KEY (document_id) REFERENCES documents(document_id),
+                FOREIGN KEY (parse_run_id) REFERENCES document_parse_runs(parse_run_id),
                 FOREIGN KEY (evidence_id) REFERENCES evidence(evidence_id)
             );
 
