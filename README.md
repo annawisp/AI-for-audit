@@ -2,7 +2,7 @@
 
 这是收入循环智能审计助手的工程骨架。产品架构遵循：**Audit Procedure 是主流程，AI/Rules 是可插拔能力，Evidence 是统一输出，Human Review 是正式结论入口**。
 
-当前完成范围：`Stage 2 / Step 2.3 / TASK-203` 代码草稿。
+当前完成范围：`Stage 4 / Step 4.1 / TASK-401` 本地代码草稿。
 
 ## 当前能力
 
@@ -25,10 +25,17 @@
 - Project Context 最小上下文字段与版本化快照
 - 字段标准化记录：raw value、standard value、normalization rule、quality status
 - 数据集质量分级：READY / PARTIAL / ABSTAINED procedure readiness 输入
+- 文档与表格解析，生成可追溯 document chunks
+- 合同要素抽取 Capability，并生成 Evidence Object
+- 收入确认分析 Capability，并生成 Evidence Object
+- 收入风险识别 Capability，并生成 Evidence Object
+- 数据核对与异常检测 Capability，并生成 Evidence Object
+- 配置驱动的审计程序注册表 Procedure Registry
+- 程序 readiness 解释 API
 
-> 当前版本没有合同解析、审计程序状态机、AI 审计判断、底稿输出和真实客户资料处理。这些属于后续任务。
+> 当前版本没有完整九态程序状态机、AI 审计判断、底稿输出和真实客户资料处理。这些属于后续任务。
 >
-> 当前状态为 **TASK-203 代码上传后待远端 CI 验收**。Normalization API 可用只代表字段标准化记录和数据集质量快照可以被保存、追溯和查询，不代表收入审计智能体已经具备审计判断能力。
+> 当前状态为 **TASK-401 本地代码草稿完成后待统一验收**。Procedure Registry 只负责描述程序输入、依赖、输出和 readiness，不直接执行 TASK-301 到 TASK-305 能力。
 
 ## 目录结构
 
@@ -165,6 +172,18 @@ git status --short
 
 ## 下一步
 
-按任务书继续推进 `Stage 2 / TASK-204` 或下一项已排期搭建工作。TASK-203 已提供后续审计程序编排所需的标准化字段记录和数据集质量输入，但仍不负责审计结论生成。
+当前代码已推进到 `Stage 4 / Step 4.1 / TASK-401`：审计程序注册表。
+
+TASK-401 新增能力：
+
+- 通过 `backend/app/orchestrator/procedure_registry.json` 配置 P-REV-001 到 P-REV-005 五个收入循环审计程序。
+- 显式描述每个程序的必需输入、可选输入、依赖输入、上游依赖、输出 Evidence 和可调用 Capability。
+- 开发人员可通过调整注册表配置新增或调整程序依赖，不需要修改注册表核心加载代码。
+- 配置加载时校验重复 `procedure_id`、非法 readiness 策略、未知 Capability、未知上游 Procedure 和非法 minimum input group。
+- 提供程序定义查询 API 和 readiness 解释 API。
+- readiness 当前支持 `READY`、`PARTIAL`、`BLOCKED`、`NOT_APPLICABLE` 四类解释状态。
+- Registry 不直接执行 Capability，不提前实现 TASK-402 九态程序状态机。
+
+下一步应按任务书进入 TASK-402，建设 NOT_STARTED / READY / RUNNING / COMPLETED / PARTIAL / NOT_APPLICABLE / NOT_PERFORMED / BLOCKED / ABSTAINED 九态状态机。
 
 架构说明见 [`docs/architecture.md`](docs/architecture.md)，关键技术决策见 [`docs/decisions/ADR-001-foundation-stack.md`](docs/decisions/ADR-001-foundation-stack.md)。
