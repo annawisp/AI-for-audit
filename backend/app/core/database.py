@@ -180,7 +180,6 @@ def initialize_database(settings: Settings) -> None:
                 extraction_run_id TEXT PRIMARY KEY,
                 project_id TEXT NOT NULL,
                 document_id TEXT NOT NULL,
-                parse_run_id TEXT,
                 evidence_id TEXT,
                 status TEXT NOT NULL,
                 extractor_type TEXT NOT NULL,
@@ -190,7 +189,6 @@ def initialize_database(settings: Settings) -> None:
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (project_id) REFERENCES projects(project_id),
                 FOREIGN KEY (document_id) REFERENCES documents(document_id),
-                FOREIGN KEY (parse_run_id) REFERENCES document_parse_runs(parse_run_id),
                 FOREIGN KEY (evidence_id) REFERENCES evidence(evidence_id)
             );
 
@@ -223,7 +221,7 @@ def initialize_database(settings: Settings) -> None:
                 revenue_risk_evidence_id TEXT,
                 evidence_id TEXT,
                 status TEXT NOT NULL,
-                overall_exception_level TEXT,
+                overall_exception_level TEXT NOT NULL,
                 coverage_json TEXT NOT NULL,
                 nodes_json TEXT NOT NULL,
                 matched_links_json TEXT NOT NULL,
@@ -240,6 +238,39 @@ def initialize_database(settings: Settings) -> None:
                 FOREIGN KEY (revenue_recognition_evidence_id) REFERENCES evidence(evidence_id),
                 FOREIGN KEY (revenue_risk_evidence_id) REFERENCES evidence(evidence_id),
                 FOREIGN KEY (evidence_id) REFERENCES evidence(evidence_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS procedure_execution_states (
+                state_id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                procedure_id TEXT NOT NULL,
+                procedure_name TEXT NOT NULL,
+                status TEXT NOT NULL,
+                status_reason TEXT NOT NULL,
+                source_type TEXT NOT NULL,
+                abstention_level TEXT,
+                related_evidence_ids_json TEXT NOT NULL,
+                blocked_by_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (project_id) REFERENCES projects(project_id),
+                UNIQUE (project_id, procedure_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS procedure_state_transitions (
+                transition_id TEXT PRIMARY KEY,
+                state_id TEXT NOT NULL,
+                project_id TEXT NOT NULL,
+                procedure_id TEXT NOT NULL,
+                from_status TEXT,
+                to_status TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                triggered_by TEXT NOT NULL,
+                actor TEXT,
+                trace_id TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (state_id) REFERENCES procedure_execution_states(state_id),
+                FOREIGN KEY (project_id) REFERENCES projects(project_id)
             );
 
             CREATE TABLE IF NOT EXISTS dataset_quality_snapshots (
@@ -293,5 +324,12 @@ def initialize_database(settings: Settings) -> None:
                 "timestamp": "timestamp TEXT NOT NULL DEFAULT ''",
                 "created_at": "created_at TEXT NOT NULL DEFAULT ''",
                 "updated_at": "updated_at TEXT NOT NULL DEFAULT ''",
+            },
+        )
+        _add_missing_columns(
+            connection,
+            "procedure_state_transitions",
+            {
+                "trace_id": "trace_id TEXT NOT NULL DEFAULT ''",
             },
         )
