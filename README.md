@@ -2,7 +2,7 @@
 
 这是收入循环智能审计助手的工程骨架。产品架构遵循：**Audit Procedure 是主流程，AI/Rules 是可插拔能力，Evidence 是统一输出，Human Review 是正式结论入口**。
 
-当前完成范围：`Stage 4 / Step 4.1 / TASK-401` 本地代码草稿。
+当前完成范围：`Stage 4 / Step 4.3 / TASK-403` 已上传 GitHub，并已通过远端 Foundation CI。
 
 ## 当前能力
 
@@ -32,10 +32,14 @@
 - 数据核对与异常检测 Capability，并生成 Evidence Object
 - 配置驱动的审计程序注册表 Procedure Registry
 - 程序 readiness 解释 API
+- 审计程序九态状态机：NOT_STARTED / READY / RUNNING / COMPLETED / PARTIAL / NOT_APPLICABLE / NOT_PERFORMED / BLOCKED / ABSTAINED
+- 程序运行实例、状态转换、人工复核动作与 Evidence 关联的基础 API
+- 审计程序依赖图：显式描述程序、数据、证据与字段之间的依赖关系
+- 局部失败影响分析：在上游程序或依赖节点失败时，给出下游程序的 recommended status 与影响原因
 
-> 当前版本没有完整九态程序状态机、AI 审计判断、底稿输出和真实客户资料处理。这些属于后续任务。
+> 当前版本已经具备收入循环 MVP 的基础工程、审计能力、程序注册表、程序状态机和依赖图能力。AI 审计判断深化、底稿输出、前端复核工作台深化和真实客户资料处理仍属于后续任务。
 >
-> 当前状态为 **TASK-401 本地代码草稿完成后待统一验收**。Procedure Registry 只负责描述程序输入、依赖、输出和 readiness，不直接执行 TASK-301 到 TASK-305 能力。
+> 当前状态为 **TASK-403 已上传 GitHub，并通过远端 Foundation CI**。Procedure Registry 描述程序输入、依赖、输出和 readiness；Procedure State Machine 管理程序运行状态；Dependency Graph 用于识别局部失败对下游程序的影响。Human Review 仍是正式审计结论入口。
 
 ## 目录结构
 
@@ -46,9 +50,9 @@ ai-for-audit/
 │   │   ├── api/            # HTTP API 路由
 │   │   ├── capabilities/   # 独立审计能力模块
 │   │   ├── core/           # 配置、日志等横切能力
-│   │   ├── evidence/       # Evidence 组装与证据链能力（后续深化）
-│   │   ├── models/         # 持久化模型（后续实现）
-│   │   ├── orchestrator/   # Audit Procedure 编排器（后续实现）
+│   │   ├── evidence/       # Evidence 组装与证据链能力
+│   │   ├── models/         # 持久化模型（后续深化）
+│   │   ├── orchestrator/   # Audit Procedure 注册、状态机与依赖图
 │   │   ├── schemas/        # API / 领域数据结构
 │   │   └── services/       # 应用服务
 │   ├── tests/              # 后端自动化测试
@@ -170,20 +174,32 @@ git status --short
 
 正式验收仍需基于上传到 GitHub 的候选 commit SHA 执行 GitHub Actions 和非开发人员 Windows 11 冷启动。
 
-## 下一步
+## 已完成的 Stage 4 能力
 
-当前代码已推进到 `Stage 4 / Step 4.1 / TASK-401`：审计程序注册表。
-
-TASK-401 新增能力：
+### TASK-401：审计程序注册表 Procedure Registry
 
 - 通过 `backend/app/orchestrator/procedure_registry.json` 配置 P-REV-001 到 P-REV-005 五个收入循环审计程序。
 - 显式描述每个程序的必需输入、可选输入、依赖输入、上游依赖、输出 Evidence 和可调用 Capability。
 - 开发人员可通过调整注册表配置新增或调整程序依赖，不需要修改注册表核心加载代码。
 - 配置加载时校验重复 `procedure_id`、非法 readiness 策略、未知 Capability、未知上游 Procedure 和非法 minimum input group。
 - 提供程序定义查询 API 和 readiness 解释 API。
-- readiness 当前支持 `READY`、`PARTIAL`、`BLOCKED`、`NOT_APPLICABLE` 四类解释状态。
-- Registry 不直接执行 Capability，不提前实现 TASK-402 九态程序状态机。
 
-下一步应按任务书进入 TASK-402，建设 NOT_STARTED / READY / RUNNING / COMPLETED / PARTIAL / NOT_APPLICABLE / NOT_PERFORMED / BLOCKED / ABSTAINED 九态状态机。
+### TASK-402：审计程序状态机 Procedure State Machine
+
+- 支持 NOT_STARTED / READY / RUNNING / COMPLETED / PARTIAL / NOT_APPLICABLE / NOT_PERFORMED / BLOCKED / ABSTAINED 九类状态。
+- 提供程序运行实例创建、状态查询、状态转换和人工复核动作记录能力。
+- 状态转换保留 Evidence 引用、原因说明、操作者和时间戳，便于后续审计追踪。
+- 状态机只管理程序执行状态，不替代 Human Review 的正式审计结论。
+
+### TASK-403：依赖图与局部失败影响分析 Dependency Graph
+
+- 通过 `backend/app/orchestrator/procedure_dependency_graph.json` 描述程序、数据集、字段、证据之间的依赖节点和边。
+- 提供依赖图查询、单节点依赖查询和局部失败影响分析 API。
+- 当上游节点处于 BLOCKED / PARTIAL / ABSTAINED / NOT_APPLICABLE 等状态时，输出下游受影响节点、recommended status、dependency path 和 impact reason。
+- 影响分析仅用于执行编排和复核提示，不自动生成正式审计结论。
+
+## 下一步
+
+当前代码已推进到 `Stage 4 / Step 4.3 / TASK-403`。下一步应按搭建任务书继续进入后续 TASK，深化 Audit Procedure 编排、Human Review、底稿输出或前端复核工作台等能力。
 
 架构说明见 [`docs/architecture.md`](docs/architecture.md)，关键技术决策见 [`docs/decisions/ADR-001-foundation-stack.md`](docs/decisions/ADR-001-foundation-stack.md)。
