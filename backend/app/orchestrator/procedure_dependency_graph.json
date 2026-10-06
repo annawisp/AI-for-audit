@@ -1,0 +1,172 @@
+{
+  "graph_version": "procedure_dependency_graph_v1",
+  "nodes": [
+    {
+      "node_id": "P01.document_parse",
+      "node_name": "Document parsing",
+      "node_type": "procedure",
+      "procedure_id": "P-REV-001",
+      "description": "Parse uploaded audit documents into traceable chunks."
+    },
+    {
+      "node_id": "P02.performance_obligation",
+      "node_name": "Performance obligation assessment",
+      "node_type": "field",
+      "procedure_id": "P-REV-002",
+      "description": "Extract and assess performance obligation terms from contract evidence."
+    },
+    {
+      "node_id": "P03.transaction_price",
+      "node_name": "Transaction price assessment",
+      "node_type": "field",
+      "procedure_id": "P-REV-002",
+      "description": "Extract and assess transaction price terms from contract evidence."
+    },
+    {
+      "node_id": "P04.payment_terms",
+      "node_name": "Payment terms assessment",
+      "node_type": "field",
+      "procedure_id": "P-REV-002",
+      "description": "Extract and assess payment and collection terms from contract evidence."
+    },
+    {
+      "node_id": "P05.revenue_timing",
+      "node_name": "Revenue timing judgment",
+      "node_type": "node",
+      "procedure_id": "P-REV-003",
+      "description": "Analyze point-in-time or over-time revenue recognition timing."
+    },
+    {
+      "node_id": "P06.risk_identification",
+      "node_name": "Revenue risk identification",
+      "node_type": "procedure",
+      "procedure_id": "P-REV-004",
+      "description": "Identify revenue risk signals and review recommendations."
+    },
+    {
+      "node_id": "P07.data_reconciliation",
+      "node_name": "Data reconciliation and anomaly screening",
+      "node_type": "procedure",
+      "procedure_id": "P-REV-005",
+      "description": "Match contract, revenue, receivable, and cash receipt records."
+    },
+    {
+      "node_id": "D01.revenue_records",
+      "node_name": "Revenue records dataset",
+      "node_type": "dataset",
+      "procedure_id": null,
+      "description": "Revenue detail records used for amount-level testing."
+    },
+    {
+      "node_id": "D02.receivable_records",
+      "node_name": "Receivable records dataset",
+      "node_type": "dataset",
+      "procedure_id": null,
+      "description": "Receivable detail records used for revenue-to-receivable matching."
+    },
+    {
+      "node_id": "D03.cash_receipt_records",
+      "node_name": "Cash receipt records dataset",
+      "node_type": "dataset",
+      "procedure_id": null,
+      "description": "Cash receipt records used for revenue-to-cash matching."
+    },
+    {
+      "node_id": "C01.special_terms",
+      "node_name": "Special contract terms",
+      "node_type": "field",
+      "procedure_id": "P-REV-002",
+      "description": "Special clauses that may affect revenue recognition or risk."
+    }
+  ],
+  "edges": [
+    {
+      "edge_id": "E01.parse_to_performance_obligation",
+      "from_node_id": "P01.document_parse",
+      "to_node_id": "P02.performance_obligation",
+      "dependency_type": "required",
+      "failure_effect": "BLOCKED",
+      "description": "Performance obligation extraction requires parsed document chunks."
+    },
+    {
+      "edge_id": "E02.parse_to_transaction_price",
+      "from_node_id": "P01.document_parse",
+      "to_node_id": "P03.transaction_price",
+      "dependency_type": "required",
+      "failure_effect": "BLOCKED",
+      "description": "Transaction price extraction requires parsed document chunks."
+    },
+    {
+      "edge_id": "E03.parse_to_payment_terms",
+      "from_node_id": "P01.document_parse",
+      "to_node_id": "P04.payment_terms",
+      "dependency_type": "required",
+      "failure_effect": "BLOCKED",
+      "description": "Payment terms extraction requires parsed document chunks."
+    },
+    {
+      "edge_id": "E04.performance_obligation_to_timing",
+      "from_node_id": "P02.performance_obligation",
+      "to_node_id": "P05.revenue_timing",
+      "dependency_type": "required",
+      "failure_effect": "ABSTAINED",
+      "description": "Revenue timing judgment depends on performance obligation analysis."
+    },
+    {
+      "edge_id": "E05.transaction_price_to_risk",
+      "from_node_id": "P03.transaction_price",
+      "to_node_id": "P06.risk_identification",
+      "dependency_type": "optional",
+      "failure_effect": "PARTIAL",
+      "description": "Transaction price issues limit amount-related risk signals but do not stop all risk identification."
+    },
+    {
+      "edge_id": "E06.payment_terms_to_risk",
+      "from_node_id": "P04.payment_terms",
+      "to_node_id": "P06.risk_identification",
+      "dependency_type": "optional",
+      "failure_effect": "PARTIAL",
+      "description": "Payment terms issues limit collection-related risk signals but do not stop all risk identification."
+    },
+    {
+      "edge_id": "E07_special_terms_to_risk",
+      "from_node_id": "C01.special_terms",
+      "to_node_id": "P06.risk_identification",
+      "dependency_type": "optional",
+      "failure_effect": "PARTIAL",
+      "description": "Special terms can increase risk coverage but missing terms should not block all risk identification."
+    },
+    {
+      "edge_id": "E08.revenue_records_to_risk",
+      "from_node_id": "D01.revenue_records",
+      "to_node_id": "P06.risk_identification",
+      "dependency_type": "optional",
+      "failure_effect": "PARTIAL",
+      "description": "Revenue records improve data-based risk signals but are optional for contract-only risk analysis."
+    },
+    {
+      "edge_id": "E09.revenue_records_to_reconciliation",
+      "from_node_id": "D01.revenue_records",
+      "to_node_id": "P07.data_reconciliation",
+      "dependency_type": "required",
+      "failure_effect": "BLOCKED",
+      "description": "Data reconciliation requires revenue records for record-level matching."
+    },
+    {
+      "edge_id": "E10.receivables_to_reconciliation",
+      "from_node_id": "D02.receivable_records",
+      "to_node_id": "P07.data_reconciliation",
+      "dependency_type": "optional",
+      "failure_effect": "PARTIAL",
+      "description": "Receivable records limit receivable matching but do not stop all reconciliation."
+    },
+    {
+      "edge_id": "E11.cash_to_reconciliation",
+      "from_node_id": "D03.cash_receipt_records",
+      "to_node_id": "P07.data_reconciliation",
+      "dependency_type": "optional",
+      "failure_effect": "PARTIAL",
+      "description": "Cash receipt records limit cash matching but do not stop all reconciliation."
+    }
+  ]
+}

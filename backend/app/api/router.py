@@ -7,6 +7,10 @@ from app.api.routes.documents import router as documents_router
 from app.api.routes.evidence import router as evidence_router
 from app.api.routes.health import router as health_router
 from app.api.routes.normalization import router as normalization_router
+from app.api.routes.procedure_dependency import (
+    project_router as procedure_dependency_project_router,
+)
+from app.api.routes.procedure_dependency import router as procedure_dependency_router
 from app.api.routes.procedure_registry import router as procedure_registry_router
 from app.api.routes.procedure_state import router as procedure_state_router
 from app.api.routes.project_context import router as project_context_router
@@ -24,6 +28,8 @@ api_router.include_router(revenue_risk_router)
 api_router.include_router(data_reconciliation_router)
 api_router.include_router(evidence_router)
 api_router.include_router(normalization_router)
+api_router.include_router(procedure_dependency_router)
+api_router.include_router(procedure_dependency_project_router)
 api_router.include_router(procedure_registry_router)
 api_router.include_router(procedure_state_router)
 api_router.include_router(project_context_router)
